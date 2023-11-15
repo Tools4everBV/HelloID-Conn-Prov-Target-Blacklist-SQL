@@ -7,8 +7,9 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
 <a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/graphs/contributors"><img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL?color=2b9348"></a>
 
 | :information_source: Information |
-|:---------------------------|
-| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.       |
+| :------------------------------- |
+| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.  |
+
 
 <p align="center">
   <img src="https://cdn-icons-png.flaticon.com/128/4443/4443857.png">
@@ -32,11 +33,11 @@ With this connector we have the option to write unique values, e.g. SamAccountNa
 
 The HelloID connector consists of the template scripts shown in the following table.
 
-| Action | Action(s) Performed  | Comment |
-| ------ | -------------------- | -------------------------------------------------- |
-| create.accountDate.ps1        | Write account data to SQL DB table               | Uses account data from another system like AD or Azure AD  |
-| create.sqlData.ps1            | Generate unique value and write to SQL DB table  | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for you AD or Azure AD system  |
-| checkOnExternalSystems.ps1    | Check mapped fields against SQL DB               | This is configured in the built-in AD connector |
+| Action                            | Action(s) Performed                             | Comment                                                                                                                                                                   |
+| --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| create.useDataFromOthersystem.ps1 | Write account data to SQL DB table              | Uses account data from another system like AD or Azure AD                                                                                                                 |
+| create.generateUniqueData.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for you AD or Azure AD system |
+| checkOnExternalSystems.ps1        | Check mapped fields against SQL DB              | This is configured in the built-in AD connector                                                                                                                           |
 
 ### Connection settings
 The following settings are required to connect to SQL DB.

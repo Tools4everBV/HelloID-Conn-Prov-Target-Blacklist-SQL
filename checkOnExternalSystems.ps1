@@ -1,10 +1,9 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-SQLDB
+# HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-SQL
 #
 # Version: 1.0.0
 #####################################################
 # Initialize default values
-$c = $configuration | ConvertFrom-Json
 $p = $person | ConvertFrom-Json
 $success = $false # Set to false at start, at the end, only when no error occurs it is set to true
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -16,7 +15,7 @@ $eRef = $entitlementContext | ConvertFrom-Json
 $c = $eRef.configuration
 
 # The account object contains the account mapping that is configured
-$a = $account | ConvertFrom-Json;
+$a = $account | ConvertFrom-Json
 
 # Set debug logging
 switch ($($c.isDebug)) {
@@ -112,13 +111,13 @@ function Invoke-SQLQuery {
     }
     catch {
         $Data.Value = $null
-        Write-Error $_
+        throw $_
     }
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
+            Write-Verbose "Successfully disconnected from SQL database"
         }
-        Write-Verbose "Successfully disconnected from SQL database"
     }
 }
 #endregion functions
@@ -127,27 +126,26 @@ try {
     # Query current data in database
     try {
         # Enclose Property Names with brackets []
-        [System.Collections.ArrayList]$queryInsertProperties = @()
-        $queryInsertProperties = $("[" + ($valuesToCheck.PSObject.Properties.Value.databaseColumn -join "],[") + "]")
-
+        $querySelectProperties = $("[" + ($valuesToCheck.PsObject.Properties.Value.databaseColumn -join "],[") + "]")
         $querySelect = "
         SELECT
-            $($queryInsertProperties)
+            $($querySelectProperties)
         FROM
             $table"
 
         Write-Verbose "Querying data from table [$($table)]. Query: $($querySelect)"
 
-        $querySelectResult = [System.Collections.ArrayList]::new()
         $querySelectSplatParams = @{
             ConnectionString = $connectionString
+            Username         = $username
+            Password         = $password
             SqlQuery         = $querySelect
-            ErrorAction      = 'Stop'
+            ErrorAction      = "Stop"
         }
-
+        $querySelectResult = [System.Collections.ArrayList]::new()
         Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
 
-        Write-Verbose "Successfully queried data from table [$($table)]. Returned rows: $(($querySelectResult | Measure-Object).Count)"
+        Write-Verbose "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
     }
     catch {
         $ex = $PSItem
@@ -159,10 +157,9 @@ try {
         Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
         $auditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
-                Message = "Error querying data from table '[$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
+                Message = "Error querying data from table [$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
                 IsError = $True
             })
-
 
         # Use throw, as auditLogs are not available in check on external system
         throw "Error querying data from table '[$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
@@ -172,11 +169,11 @@ try {
     Try {
         foreach ($valueToCheck in $valuesToCheck.PsObject.Properties) {
             if ($valueToCheck.Value.accountValue -in $querySelectResult."$($valueToCheck.Value.databaseColumn)") {
-                Write-Warning "$($valueToCheck.Name) value '$($valueToCheck.Value.accountValue)' is NOT unique in database column '$($valueToCheck.Value.databaseColumn)'"
+                Write-Warning "$($valueToCheck.Name) value [$($valueToCheck.Value.accountValue)] is NOT unique in database column [$($valueToCheck.Value.databaseColumn)]"
                 [void]$NonUniqueFields.Add("$($valueToCheck.Name)")
             }
             else {
-                Write-Verbose "$($valueToCheck.Name) value '$($valueToCheck.Value.accountValue)' is unique in database column '$($valueToCheck.Value.databaseColumn)'"
+                Write-Verbose "$($valueToCheck.Name) value [$($valueToCheck.Value.accountValue)] is unique in database column '$($valueToCheck.Value.databaseColumn)]"
             }
         }
     }
@@ -206,11 +203,8 @@ catch {
     $auditErrorMessage = $ex.Exception.Message
 
     Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-    $auditLogs.Add([PSCustomObject]@{
-            # Action  = "" # Optional
-            Message = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-            IsError = $True
-        })
+    # Use throw, as auditLogs are not available in check on external system
+    throw "Error performing uniqueness check on external systems. Error Message: $($auditErrorMessage)"
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true
