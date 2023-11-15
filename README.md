@@ -10,7 +10,6 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
 | :------------------------------- |
 | This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.  |
 
-
 <p align="center">
   <img src="https://cdn-icons-png.flaticon.com/128/4443/4443857.png">
 </p>
