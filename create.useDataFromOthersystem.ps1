@@ -97,13 +97,13 @@ function Invoke-SQLQuery {
     }
     catch {
         $Data.Value = $null
-        Write-Error $_
+        throw $_
     }
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
+            Write-Verbose "Successfully disconnected from SQL database"
         }
-        Write-Verbose "Successfully disconnected from SQL database"
     }
 }
 #endregion functions
@@ -112,18 +112,16 @@ try {
     # Update blacklist database
     try {
         # Enclose Property Names with brackets []
-        [System.Collections.ArrayList]$queryInsertProperties = @()
         $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
         # Enclose Property Values with single quotes ''
-        [System.Collections.ArrayList]$queryInsertValues = @()
         $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
 
         $queryInsert = "
         INSERT INTO $table
             ($($queryInsertProperties))
         VALUES
-            ($($queryInsertValues)"
-   
+            ($($queryInsertValues))"
+            
         if (-not($dryRun -eq $true)) {
             Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
 
@@ -140,12 +138,12 @@ try {
 
             $auditLogs.Add([PSCustomObject]@{
                     # Action  = "" # Optional
-                    Message = "Successfully data into table [$($table)]. Query: $($queryInsert)"
+                    Message = "Successfully inserted data into table [$($table)]. Query: $($queryInsert)"
                     IsError = $false;
                 });   
         }
         else {
-            Write-Warning "DryRun: Would insert [$($uniqueValue)] into column [$($column)] in table [$($table)]"
+            Write-Warning "DryRun: Would insert data into table [$($table)]. Query: $($queryInsert)"
         }
     }
     catch {
