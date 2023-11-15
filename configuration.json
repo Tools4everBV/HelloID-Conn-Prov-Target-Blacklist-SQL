@@ -1,0 +1,47 @@
+[
+    {
+        "key": "connectionString",
+        "type": "input",
+        "defaultValue": "Server=<server>;Database=<database>;Integrated Security=True;",
+        "templateOptions": {
+            "label": "Connection string",
+            "placeholder": "Server=<server>;Database=<database>;Integrated Security=True;",
+            "description": "The connection string used to connect to the SQL database",
+            "required": true
+        }
+    },
+    {
+        "key": "username",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Username",
+            "placeholder": "sa_helloid",
+            "description": "Optional: The username of the SQL user to use in the connection string",
+            "required": false
+        }
+    },
+    {
+        "key": "password",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Password",
+            "type": "password",
+            "placeholder": "P@ssw0rd1!",
+            "description": "Optional: The username of the SQL user to use in the connection string",
+            "required": false
+        }
+    },
+    {
+        "key": "table",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Table",
+            "placeholder": "blacklist",
+            "description": "The table in which the blacklist values reside",
+            "required": true
+        }
+    }
+]
