@@ -1,0 +1,40 @@
+{
+  "Version": "v1",
+  "MappingFields": [
+    {
+      "Name": "persnr",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.ExternalId\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "email",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getEmailAddress() {\\r\\n    let mail = '';\\r\\n\\r\\n    // if (typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.mail) {\\r\\n    //     mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    // }\\r\\n    mail = \\\"test@wzh.nl\\\"\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmailAddress()\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    }
+  ],
+  "UniqueFieldNames": []
+}
