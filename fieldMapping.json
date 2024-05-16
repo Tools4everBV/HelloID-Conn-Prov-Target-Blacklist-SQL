@@ -29,7 +29,7 @@
             "Update"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getEmailAddress() {\\r\\n    let mail = '';\\r\\n\\r\\n    // if (typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.mail) {\\r\\n    //     mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    // }\\r\\n    mail = \\\"test@wzh.nl\\\"\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmailAddress()\"",
+          "Value": "\"function getEmailAddress() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.mail) {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    }\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmailAddress()\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
