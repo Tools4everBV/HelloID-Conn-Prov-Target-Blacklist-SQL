@@ -1,19 +1,53 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-Create-SQL
 #
-# Version: 2.0.0
+# Version: 1.0.0
 #####################################################
 # Initialize default values
-$c = $actionContext.configuration
 
-$outputContext.Success = $false 
+write-warning "not converted to PSv2"
+break
+
+$c = $configuration | ConvertFrom-Json
+$p = $person | ConvertFrom-Json
+$success = $false # Set to false at start, at the end, only when no error occurs it is set to true
+$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 # Set debug logging
 switch ($($c.isDebug)) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
 
+# Used to connect to SQL server.
+$connectionString = $c.connectionString
+$username = $c.username
+$password = $c.password
+$table = $c.table
+
+#region Change mapping here
+# Define prefix of generated unique value
+$prefix = $p.Name.FamilyName.substring(0, 1)
+$suffix = ""
+# Define range of allowed numbers
+$inputRange = 0000..9999
+# Define amount of characters the string should always be. E.g. 4 if the string should always be 4 chars long, even if the generated number is 3, the string will be "0003"
+$amountOfChars = 4 # If left empty, the generated number will not be prefixed by leading zeros
+
+$account = [PSCustomObject]@{
+    "SamAccountName" = "Unknown" # Generated further down in script
+}
+#endregion Change mapping here
+
+# Define aRef
+$aRef = $account.SamAccountName # Use most unique propertie, e.g. SamAccountName or UserPrincipalName
+
+# Define account properties to store in account data
+$storeAccountFields = @("SamAccountName")
+
+#region functions
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -82,48 +116,20 @@ function Invoke-SQLQuery {
         }
     }
 }
-
+#endregion functions
 
 try {
-    # Used to connect to SQL server.
-    $connectionString = $c.connectionString
-    $username = $c.username
-    $password = $c.password
-    $table = $c.table
-
-    # Validate correlation configuration
-    if ($actionContext.CorrelationConfiguration.Enabled) {
-        $correlationPersonField = $actionContext.CorrelationConfiguration.PersonField
-        $correlationAccountField = $actionContext.CorrelationConfiguration.AccountField
-        $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
-
-
-        if ([string]::IsNullOrEmpty($($correlationAccountField)) -OR [string]::IsNullOrEmpty($($correlationPersonField))) {
-            throw 'Correlation is enabled but not configured correctly'
-        }
-        if ([string]::IsNullOrEmpty($($correlationValue))) {
-            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
-        }
-    }
-    else {
-        throw 'Enabling correlation is mandatory'
-    }
-
-    $account = $actionContext.Data
-
+    # Query current data in database
     try {
         # Enclose Property Names with brackets []
         $querySelectProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-        
         $querySelect = "
         SELECT
             $($querySelectProperties)
         FROM
-            $table
-        WHERE [$correlationAccountField] = '$correlationValue'
-            "
+            $table"
 
-        Write-verbose "Querying data from table [$($table)]. Query: $($querySelect)"
+        Write-Verbose "Querying data from table [$($table)]. Query: $($querySelect)"
 
         $querySelectSplatParams = @{
             ConnectionString = $connectionString
@@ -133,113 +139,155 @@ try {
             ErrorAction      = "Stop"
         }
         $querySelectResult = [System.Collections.ArrayList]::new()
-        Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
+        Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
 
         Write-Verbose "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
-
-        $selectRowCount = ($querySelectResult | measure-object).count
-
-        if ($selectRowCount -eq 1) {
-            $correlatedAccount = $querySelectResult
-            $action = "CorrelateAccount"
-            
-        }
-        elseif ($selectRowCount -eq 0) {
-            $action = "createAccount"
-        }
-        else {
-            Throw "multiple ($selectRowCount) rows found with correlationAccountField [$correlationValue]"
-        }
-
     }
     catch {
         $ex = $PSItem
+        # Set Verbose error message
+        $verboseErrorMessage = $ex.Exception.Message
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
-        Throw "$auditErrorMessage"
+        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        $auditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Error querying data from table [$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
+                IsError = $True
+            })
+
+        # Skip further actions, as this is a critical error
+        continue
+    }
+
+    # Get current values and generate random value that does not exist yet
+    try {
+        # Format input range to specified amount of chars, prefix and/or suffix
+        $inputRange = $inputRange | ForEach-Object { "$prefix{0:d$amountOfChars}$suffix" -f $_ }
+
+        Write-Verbose "Generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist"
+
+        $currentValues = $querySelectResult."$($column)" | Sort-Object
+        $excludeRange = $currentValues
+
+        $regexExcludeRange = '(?i)^(' + (($excludeRange | Foreach-Object { [regex]::escape($_) }) -join “|”) + ')$'
+        $randomRange = $inputRange -notmatch $regexExcludeRange
+        if ($null -eq $randomRange) {
+            throw "Error generating random value: No more values allowed. Please adjust the range. Current range: $($inputRange | Select-Object -First 1) to $($inputRange | Select-Object -Last 1)"
+        }
+        $uniqueValue = Get-Random -InputObject $randomRange
+
+        # Set SamAccountName of Account object with generated unique value
+        $account.SamAccountName = $uniqueValue
+
+        Write-Verbose "Successfully generated random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist: [$($uniqueValue)]"
+    }
+    catch {
+        $ex = $PSItem
+        # Set Verbose error message
+        $verboseErrorMessage = $ex.Exception.Message
+        # Set Audit error message
+        $auditErrorMessage = $ex.Exception.Message
+
+        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        $auditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Error generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist. Error Message: $auditErrorMessage"
+                IsError = $True
+            })
+
+        # Skip further actions, as this is a critical error
+        continue
     }
 
     # Update blacklist database
     try {
-        switch ($action) {
-            "CorrelateAccount" {
-                Write-Verbose "correlated Account data: $($correlatedAccount | convertto-json)"
+        # Enclose Property Names with brackets []
+        $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
+        # Enclose Property Values with single quotes ''
+        $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
 
-                $outputContext.Data = $correlatedAccount
-                $outputContext.AccountReference = $correlatedAccount.($correlationAccountField)
-                $outputContext.AccountCorrelated = $true
-
-                $outputContext.auditlogs.Add([PSCustomObject]@{
-                        Action  = $action # Optional
-                        Message = "Successfully $action with $correlationAccountField [$correlationValue]."
-                        IsError = $false;
-                    });
-
-                break
-            }
-            "createAccount" {
-
-                # Enclose Property Names with brackets []
-                $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-                # Enclose Property Values with single quotes ''
-                $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
+        $queryInsert = "
+        INSERT INTO $table
+            ($($queryInsertProperties))
+        VALUES
+            ($($queryInsertValues))"
             
-                $queryInsert = "
-            INSERT INTO $table
-                ($($queryInsertProperties))
-            VALUES
-                ($($queryInsertValues))"
+        if (-not($dryRun -eq $true)) {
+            Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
 
-                $queryInsertSplatParams = @{
-                    ConnectionString = $connectionString
-                    Username         = $username
-                    Password         = $password
-                    SqlQuery         = $queryInsert
-                    ErrorAction      = "Stop"
-                }
-
-                $queryInsertResult = [System.Collections.ArrayList]::new()
-                if (-not($actioncontext.dryRun -eq $true)) {
-                    Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
-                    Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
-                }
-                else {
-                    Write-Warning "DryRun: Would insert data into table [$($table)]. Query: $($queryInsert)"
-                }
-                $outputContext.AccountReference = $correlationValue
-                $outputContext.auditlogs.Add([PSCustomObject]@{
-                        Action  = $action
-                        Message = "Successfully inserted data into table [$($table)] with $correlationAccountField [$correlationValue]"
-                        IsError = $false;
-                    });   
+            $queryInsertSplatParams = @{
+                ConnectionString = $connectionString
+                Username         = $username
+                Password         = $password
+                SqlQuery         = $queryInsert
+                ErrorAction      = "Stop"
             }
-        } 
+
+            $queryInsertResult = [System.Collections.ArrayList]::new()
+            Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
+
+            $auditLogs.Add([PSCustomObject]@{
+                    # Action  = "" # Optional
+                    Message = "Successfully inserted data into table [$($table)]. Query: $($queryInsert)"
+                    IsError = $false;
+                });   
+        }
+        else {
+            Write-Warning "DryRun: Would insert data into table [$($table)]. Query: $($queryInsert)"
+        }
     }
     catch {
         $ex = $PSItem
+        # Set Verbose error message
+        $verboseErrorMessage = $ex.Exception.Message
+        # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
 
-        Throw "Error processing data. Error Message: $($auditErrorMessage)"
+        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        $auditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Error inserting data into table [$($table)]. Query: $($queryInsert). Error Message: $($auditErrorMessage)"
+                IsError = $True
+            })
     }
-  
+
+    # Define ExportData with account fields and correlation property 
+    $exportData = $account.PsObject.Copy() | Select-Object $storeAccountFields
+    # Add aRef to exportdata
+    $exportData | Add-Member -MemberType NoteProperty -Name "AccountReference" -Value $aRef -Force
 }
 catch {
     $ex = $PSItem
+    # Set Verbose error message
+    $verboseErrorMessage = $ex.Exception.Message
+    # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
-    $outputContext.auditlogs.Add([PSCustomObject]@{
-            # Action  = $action
-            Message = "Executing script failed: $($auditErrorMessage)"
+    Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    $auditLogs.Add([PSCustomObject]@{
+            # Action  = "" # Optional
+            Message = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
             IsError = $True
         })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true
-    if (-NOT($outputContext.auditlogs.IsError -contains $true)) {
-        $outputContext.success = $true
+    if (-NOT($auditLogs.IsError -contains $true)) {
+        $success = $true
     }
 
+    # Send results
+    $result = [PSCustomObject]@{
+        Success          = $success
+        AccountReference = $aRef
+        AuditLogs        = $auditLogs
+        Account          = $account
+
+        # Optionally return data for use in other systems
+        ExportData       = $exportData
+    }
+
+    Write-Output ($result | ConvertTo-Json -Depth 10)
 }

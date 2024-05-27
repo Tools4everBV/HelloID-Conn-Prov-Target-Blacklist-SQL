@@ -1,43 +1,20 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-Create-SQL
+# Use data from dependent system
 #
-# Version: 1.0.0
+# Version: 2.0.0
 #####################################################
 # Initialize default values
-$c = $configuration | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
-$success = $false # Set to false at start, at the end, only when no error occurs it is set to true
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+$c = $actionContext.configuration
+
+$outputContext.Success = $false 
 
 # Set debug logging
 switch ($($c.isDebug)) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
 
-# Used to connect to SQL server.
-$connectionString = $c.connectionString
-$username = $c.username
-$password = $c.password
-$table = $c.table
-
-#region Change mapping here
-$account = [PSCustomObject]@{
-    "SamAccountName"    = $p.Accounts.MicrosoftActiveDirectory.samaccountname # Property Name has to match the DB column name
-    "UserPrincipalName" = $p.Accounts.MicrosoftActiveDirectory.userPrincipalName # Property Name has to match the DB column name
-    "Mail"              = $p.Accounts.MicrosoftActiveDirectory.mail # Property Name has to match the DB column name
-}
-#endregion Change mapping here
-
-# Define aRef
-$aRef = $account.UserPrincipalName # Use most unique propertie, e.g. SamAccountName or UserPrincipalName
-
-# Define account properties to store in account data
-$storeAccountFields = @("SamAccountName", "UserPrincipalName", "Mail")
-
-#region functions
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -106,96 +83,164 @@ function Invoke-SQLQuery {
         }
     }
 }
-#endregion functions
+
 
 try {
-    # Update blacklist database
+    # Used to connect to SQL server.
+    $connectionString = $c.connectionString
+    $username = $c.username
+    $password = $c.password
+    $table = $c.table
+
+    # Validate correlation configuration
+    if ($actionContext.CorrelationConfiguration.Enabled) {
+        $correlationPersonField = $actionContext.CorrelationConfiguration.PersonField
+        $correlationAccountField = $actionContext.CorrelationConfiguration.AccountField
+        $correlationValue = $actionContext.CorrelationConfiguration.PersonFieldValue
+
+
+        if ([string]::IsNullOrEmpty($($correlationAccountField)) -OR [string]::IsNullOrEmpty($($correlationPersonField))) {
+            throw 'Correlation is enabled but not configured correctly'
+        }
+        if ([string]::IsNullOrEmpty($($correlationValue))) {
+            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
+        }
+    }
+    else {
+        throw 'Enabling correlation is mandatory'
+    }
+
+    $account = $actionContext.Data
+
     try {
         # Enclose Property Names with brackets []
-        $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-        # Enclose Property Values with single quotes ''
-        $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
+        $querySelectProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
+        
+        $querySelect = "
+        SELECT
+            $($querySelectProperties)
+        FROM
+            $table
+        WHERE [$correlationAccountField] = '$correlationValue'
+            "
 
-        $queryInsert = "
-        INSERT INTO $table
-            ($($queryInsertProperties))
-        VALUES
-            ($($queryInsertValues))"
+        Write-verbose "Querying data from table [$($table)]. Query: $($querySelect)"
+
+        $querySelectSplatParams = @{
+            ConnectionString = $connectionString
+            Username         = $username
+            Password         = $password
+            SqlQuery         = $querySelect
+            ErrorAction      = "Stop"
+        }
+        $querySelectResult = [System.Collections.ArrayList]::new()
+        Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
+
+        Write-Verbose "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
+
+        $selectRowCount = ($querySelectResult | measure-object).count
+
+        if ($selectRowCount -eq 1) {
+            $correlatedAccount = $querySelectResult
+            $action = "CorrelateAccount"
             
-        if (-not($dryRun -eq $true)) {
-            Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
-
-            $queryInsertSplatParams = @{
-                ConnectionString = $connectionString
-                Username         = $username
-                Password         = $password
-                SqlQuery         = $queryInsert
-                ErrorAction      = "Stop"
-            }
-
-            $queryInsertResult = [System.Collections.ArrayList]::new()
-            Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
-
-            $auditLogs.Add([PSCustomObject]@{
-                    # Action  = "" # Optional
-                    Message = "Successfully inserted data into table [$($table)]. Query: $($queryInsert)"
-                    IsError = $false;
-                });   
+        }
+        elseif ($selectRowCount -eq 0) {
+            $action = "createAccount"
         }
         else {
-            Write-Warning "DryRun: Would insert data into table [$($table)]. Query: $($queryInsert)"
+            Throw "multiple ($selectRowCount) rows found with correlationAccountField [$correlationValue]"
         }
+
     }
     catch {
         $ex = $PSItem
-        # Set Verbose error message
-        $verboseErrorMessage = $ex.Exception.Message
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-        $auditLogs.Add([PSCustomObject]@{
-                # Action  = "" # Optional
-                Message = "Error inserting data into table [$($table)]. Query: $($queryInsert). Error Message: $($auditErrorMessage)"
-                IsError = $True
-            })
+        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+        Throw "$auditErrorMessage"
     }
 
-    # Define ExportData with account fields and correlation property 
-    $exportData = $account.PsObject.Copy() | Select-Object $storeAccountFields
-    # Add aRef to exportdata
-    $exportData | Add-Member -MemberType NoteProperty -Name "AccountReference" -Value $aRef -Force
+    # Update blacklist database
+    try {
+        switch ($action) {
+            "CorrelateAccount" {
+                Write-Verbose "correlated Account data: $($correlatedAccount | convertto-json)"
+
+                $outputContext.Data = $correlatedAccount
+                $outputContext.AccountReference = $correlatedAccount.($correlationAccountField)
+                $outputContext.AccountCorrelated = $true
+
+                $outputContext.auditlogs.Add([PSCustomObject]@{
+                        Action  = $action # Optional
+                        Message = "Successfully $action with $correlationAccountField [$correlationValue]."
+                        IsError = $false;
+                    });
+
+                break
+            }
+            "createAccount" {
+
+                # Enclose Property Names with brackets []
+                $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
+                # Enclose Property Values with single quotes ''
+                $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
+            
+                $queryInsert = "
+            INSERT INTO $table
+                ($($queryInsertProperties))
+            VALUES
+                ($($queryInsertValues))"
+
+                $queryInsertSplatParams = @{
+                    ConnectionString = $connectionString
+                    Username         = $username
+                    Password         = $password
+                    SqlQuery         = $queryInsert
+                    ErrorAction      = "Stop"
+                }
+
+                $queryInsertResult = [System.Collections.ArrayList]::new()
+                if (-not($actioncontext.dryRun -eq $true)) {
+                    Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
+                    Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
+                }
+                else {
+                    Write-Warning "DryRun: Would insert data into table [$($table)]. Query: $($queryInsert)"
+                }
+                $outputContext.AccountReference = $correlationValue
+                $outputContext.auditlogs.Add([PSCustomObject]@{
+                        Action  = $action
+                        Message = "Successfully inserted data into table [$($table)] with $correlationAccountField [$correlationValue]"
+                        IsError = $false;
+                    });   
+            }
+        } 
+    }
+    catch {
+        $ex = $PSItem
+        $auditErrorMessage = $ex.Exception.Message
+        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+
+        Throw "Error processing data. Error Message: $($auditErrorMessage)"
+    }
+  
 }
 catch {
     $ex = $PSItem
-    # Set Verbose error message
-    $verboseErrorMessage = $ex.Exception.Message
-    # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
-    Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-    $auditLogs.Add([PSCustomObject]@{
-            # Action  = "" # Optional
-            Message = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    $outputContext.auditlogs.Add([PSCustomObject]@{
+            # Action  = $action
+            Message = "Executing script failed: $($auditErrorMessage)"
             IsError = $True
         })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true
-    if (-NOT($auditLogs.IsError -contains $true)) {
-        $success = $true
+    if (-NOT($outputContext.auditlogs.IsError -contains $true)) {
+        $outputContext.success = $true
     }
 
-    # Send results
-    $result = [PSCustomObject]@{
-        Success          = $success
-        AccountReference = $aRef
-        AuditLogs        = $auditLogs
-        Account          = $account
-
-        # Optionally return data for use in other systems
-        ExportData       = $exportData
-    }
-
-    Write-Output ($result | ConvertTo-Json -Depth 10)
 }
