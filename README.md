@@ -39,7 +39,7 @@ The HelloID connector consists of the template scripts shown in the following ta
 | checkOnExternalSystems.ps1        | Check mapped fields against SQL DB              | This is configured in the built-in AD connector                                                                                                                           |
 
 > [!IMPORTANT]
-> create.generateUniqueData.ps1 is not converted to PS v2 connector jet.
+> create.generateUniqueData.ps1 is not converted to PS v2 connector yet.
 
 ### Connection settings
 The following settings are required to connect to SQL DB.
