@@ -59,11 +59,11 @@ The correlation configuration is used to specify which properties will be used t
 
 Specify the following configuration:
 
-    | Setting                   | Value        |
-    | ------------------------- | ------------ |
-    | Enable correlation        | `True`       |
-    | Person correlation field  | `[externalID(default)]` |
-    | Account correlation field | `[Account correlation Field]` |
+| Setting                   | Value        |
+| ------------------------- | ------------ |
+| Enable correlation        | `True`       |
+| Person correlation field  | `[externalID(default)]` |
+| Account correlation field | `[Account correlation Field]` |
 
 
 ### Mappings
