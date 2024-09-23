@@ -2,14 +2,51 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "persnr",
+      "Name": "SamAccountName",
       "Description": "",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getSamAccountName() {\\r\\n    let samAccountName = '';\\r\\n\\r\\n    if (typeof Person.Accounts._8b627f10661e481cb21a703ca27988bd.sAMAccountName !== 'undefined' && Person.Accounts._8b627f10661e481cb21a703ca27988bd.sAMAccountName) {\\r\\n        samAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    return samAccountName;\\r\\n}\\r\\n\\r\\ngetSamAccountName()\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "UserPrincipalName",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update",
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n\\r\\n    if (typeof Person.Accounts._8b627f10661e481cb21a703ca27988bd.userPrincipalName !== 'undefined' && Person.Accounts._8b627f10661e481cb21a703ca27988bd.userPrincipalName) {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\ngetUserPrincipalName()\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "EmployeeId",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update",
+            "Delete"
           ],
           "MappingMode": "Field",
           "Value": "\"Person.ExternalId\"",
@@ -19,17 +56,18 @@
       ]
     },
     {
-      "Name": "email",
+      "Name": "LastModified",
       "Description": "",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getEmailAddress() {\\r\\n    let mail = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.mail) {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    }\\r\\n    return mail;\\r\\n}\\r\\n\\r\\ngetEmailAddress()\"",
+          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n    //let dateText = date.toDateString();\\n    //return dateText;\\n}\\n\\ngetDate();\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
