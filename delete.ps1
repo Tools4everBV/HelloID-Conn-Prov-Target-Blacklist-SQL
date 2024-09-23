@@ -4,10 +4,11 @@
 #
 #####################################################
 
+# todo: This script will always update the modified date.
+# If account data is empty: lookup record by employeeId and update the lastmodified date on that record.
 # Initialize default values
+
 $c = $actionContext.configuration
-$actionContext.DryRun = $false
-								
 
 # Set debug logging
 switch ($($c.isDebug)) {

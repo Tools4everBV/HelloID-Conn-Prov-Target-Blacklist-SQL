@@ -5,7 +5,7 @@
 #####################################################
 # Initialize default values
 
-write-warning "not converted to PSv2"
+write-warning "not (yet) converted to PSv2"
 break
 
 $c = $configuration | ConvertFrom-Json
