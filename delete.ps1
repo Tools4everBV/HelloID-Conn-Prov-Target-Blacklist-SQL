@@ -1,13 +1,13 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Blacklist-Create-SQL
+# HelloID-Conn-Prov-Target-Blacklist-Delete-SQL
 # Use data from dependent system
-#
+# 
+# 1. if attribute value is empty, query on employeeId
+# 2. do not insert row on delete (only update)
+# 3. 
 #####################################################
-
-# todo: This script will always update the modified date.
-# If account data is empty: lookup record by employeeId and update the lastmodified date on that record.
+$actionContext.DryRun = $false
 # Initialize default values
-
 $c = $actionContext.configuration
 
 # Set debug logging
@@ -91,27 +91,22 @@ try {
     $username = $c.username
     $password = $c.password
 
-					 
+    $tables = $($actionContext.Data | Select-Object * -ExcludeProperty EmployeeId, LastModified).PSObject.Properties.Name 
 
-    $tables = $($actionContext.Data | Select-Object * -ExcludeProperty EmployeeId,LastModified).PSObject.Properties.Name 
- 
     foreach ($table in $tables) {
-        try {           
+        try {
             $attributeValue = $actionContext.Data.$table
             $account = $actionContext.Data | Select-Object * -ExcludeProperty $tables
             $account | Add-Member -NotePropertyName 'AttributeValue' -NotePropertyValue $attributeValue
 
             # Enclose Property Names with brackets []
             $querySelectProperties = $("[" + ($($account.PSObject.Properties.Name) -join "],[") + "]")
-        
-            $querySelect = "
-            SELECT
-                $($querySelectProperties)
-            FROM
-                $table
-            WHERE [AttributeValue] = '$attributeValue'
-                "
-
+            if ([string]::IsNullOrEmpty($attributeValue)) {
+                $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [EmployeeId] = '$($actionContext.References.Account)'"
+            } else {
+                $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [AttributeValue] = '$attributeValue'"
+            }
+            
             Write-verbose "Querying data from table [$table]. Query: $($querySelect)"
 
             $querySelectSplatParams = @{
@@ -123,93 +118,68 @@ try {
             }
             $querySelectResult = [System.Collections.ArrayList]::new()
             Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
-            
+
             $selectRowCount = ($querySelectResult | measure-object).count
             Write-Verbose "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
-            
+
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
-                
+
                 $action = "UpdateAccount"
-            
+
             }
             elseif ($selectRowCount -eq 0) {
-                $action = "CreateAccount"
+                $action = "Skip" #"CreateAccount" # skip action
             }
             else {
-                Throw "multiple ($selectRowCount) rows found with attribute [$table]"
+                Throw "multiple ($selectRowCount) rows found with attribute [$table]" # IS this a problem?
             }
- 
+
 
             # Update blacklist database
             switch ($action) {
-                "CreateAccount" {
+                "Skip" {
+                        Write-Verbose "Skipping action query select returned 0 results for table [$table]. Query: $($querySelect)"
+                    
+                        $outputContext.auditlogs.Add([PSCustomObject]@{
+                                Message = "No row found in blacklist for attribute [$table] and employeeId [$($actionContext.References.Account)]"
+                                IsError = $false
+                            })
+                    break
+                }
+                "UpdateAccount" {
+                    if ([string]::IsNullOrEmpty($attributeValue)) {                          
+                        $queryUpdateSet = "[LastModified]='$($account.LastModified)'"
+                        $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [EmployeeId] = '$($actionContext.References.Account)'"
+                        $auditMessage = "Successfully updated [lastModified] in table [$table] on rows with employeeId [$($actionContext.References.Account)]"
+                    } else {
+                        $queryUpdateSet = "SET [EmployeeId]='$($account.EmployeeId)', [LastModified]='$($account.LastModified)'"
+                        $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
+                        $auditMessage = "Successfully updated [EmployeeId, LastModified] on table [$table] on rows with attributeValue [$attributeValue]"
+                    }
 
-                    # Enclose Property Names with brackets []
-                    $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-
-                    # Enclose Property Values with single quotes ''
-                    $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
-            
-                    $queryInsert = "
-                INSERT INTO $table
-                    ($($queryInsertProperties))
-                VALUES
-                    ($($queryInsertValues))"
-
-                    $queryInsertSplatParams = @{
+                    $queryUpdateSplatParams = @{
                         ConnectionString = $connectionString
                         Username         = $username
                         Password         = $password
-                        SqlQuery         = $queryInsert
+                        SqlQuery         = $queryUpdate
                         ErrorAction      = "Stop"
                     }
 
-                    $queryInsertResult = [System.Collections.ArrayList]::new()
                     if (-not($actioncontext.dryRun -eq $true)) {
-                        Write-Verbose "Inserting row into table [$table]. Query: $($queryInsert)"
-                        Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
+                        Write-Verbose "Updating row from table [$table]. Query: $($queryUpdate)"
+                        $queryUpdateResult = [System.Collections.ArrayList]::new()
+                        Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
                     }
                     else {
-                        Write-Warning "DryRun: Would insert row into table [$table]. Query: $($queryInsert)"
+                        Write-Warning "DryRun: Would update row from table [$table]. Query: $($queryUpdate)"
                     }
-                    $outputContext.AccountReference = $account.employeeId
+
                     $outputContext.auditlogs.Add([PSCustomObject]@{
-                            Message = "Successfully inserted row into table [$table] with attributeValue [$attributeValue]"
-                            IsError = $false
-                        })
-                    break
-                }
-            "UpdateAccount" {
-                    if ($correlatedAccount.EmployeeId -ne $account.EmployeeId) {
-                        $queryUpdateSet = "SET [EmployeeId]=$($account.EmployeeId) [LastModified]=$($account.LastModified)"
-                        $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
-                    
-                        $queryUpdateSplatParams = @{
-                            ConnectionString = $connectionString
-                            Username         = $username
-                            Password         = $password
-                            SqlQuery         = $queryUpdate
-                            ErrorAction      = "Stop"
-                        }
+                        Message = $auditMessage
+                        IsError = $false
+                    })
 
-                        $queryUpdateResult = [System.Collections.ArrayList]::new()
-                        if (-not($actioncontext.dryRun -eq $true)) {
-                            Write-Verbose "Updating row from table [$table]. Query: $($queryUpdate)"
-                            Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
-                        }
-                        else {
-                            Write-Warning "DryRun: Would update row from table [$table]. Query: $($queryUpdate)"
-                        }
-                        $outputContext.AccountReference = $account.employeeId
-
-                        $outputContext.auditlogs.Add([PSCustomObject]@{
-                                Message = "Successfully updated row with attributeValue [$attributeValue]."
-                                IsError = $false
-                            })
-                    } else {
-                         Write-Verbose "Nothing to update for person"
-                    }
                     break
                 }
             }
@@ -217,11 +187,11 @@ try {
         catch {
             $ex = $PSItem
             $auditErrorMessage = $ex.Exception.Message
-            Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+            Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
             $outputContext.auditlogs.Add([PSCustomObject]@{
-                Message = "Failed to inserte data into table [$table] with attributeValue [$attributeValue]: $($auditErrorMessage)"
-                IsError = $true
-            })
+                    Message = "Failed to inserte data into table [$table] with attributeValue [$attributeValue]: $($auditErrorMessage)"
+                    IsError = $true
+                })
         }
     }
 }

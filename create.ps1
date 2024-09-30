@@ -13,6 +13,7 @@ switch ($($c.isDebug)) {
     $false { $VerbosePreference = "SilentlyContinue" }
 }
 
+$actionContext.DryRun = $false
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -88,27 +89,17 @@ try {
     $username = $c.username
     $password = $c.password
 
-					 
+    $tables = $($actionContext.Data | Select-Object * -ExcludeProperty EmployeeId, LastModified).PSObject.Properties.Name 
 
-    $tables = $($actionContext.Data | Select-Object * -ExcludeProperty EmployeeId,LastModified).PSObject.Properties.Name 
- 
     foreach ($table in $tables) {
-        try {           
+        try {
             $attributeValue = $actionContext.Data.$table
             $account = $actionContext.Data | Select-Object * -ExcludeProperty $tables
             $account | Add-Member -NotePropertyName 'AttributeValue' -NotePropertyValue $attributeValue
 
             # Enclose Property Names with brackets []
             $querySelectProperties = $("[" + ($($account.PSObject.Properties.Name) -join "],[") + "]")
-        
-            $querySelect = "
-            SELECT
-                $($querySelectProperties)
-            FROM
-                $table
-            WHERE [AttributeValue] = '$attributeValue'
-                "
-
+            $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [AttributeValue] = '$attributeValue'"
             Write-verbose "Querying data from table [$table]. Query: $($querySelect)"
 
             $querySelectSplatParams = @{
@@ -120,15 +111,15 @@ try {
             }
             $querySelectResult = [System.Collections.ArrayList]::new()
             Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
-            
+
             $selectRowCount = ($querySelectResult | measure-object).count
             Write-Verbose "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
-            
+
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
-                
+
                 $action = "UpdateAccount"
-            
+
             }
             elseif ($selectRowCount -eq 0) {
                 $action = "CreateAccount"
@@ -136,23 +127,16 @@ try {
             else {
                 Throw "multiple ($selectRowCount) rows found with attribute [$table]"
             }
- 
+
 
             # Update blacklist database
             switch ($action) {
                 "CreateAccount" {
 
-                    # Enclose Property Names with brackets []
+                    # Enclose Property Names with brackets [] & Enclose Property Values with single quotes ''
                     $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-
-                    # Enclose Property Values with single quotes ''
                     $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
-            
-                    $queryInsert = "
-                INSERT INTO $table
-                    ($($queryInsertProperties))
-                VALUES
-                    ($($queryInsertValues))"
+                    $queryInsert = "INSERT INTO $table ($($queryInsertProperties)) VALUES ($($queryInsertValues))"
 
                     $queryInsertSplatParams = @{
                         ConnectionString = $connectionString
@@ -177,11 +161,11 @@ try {
                         })
                     break
                 }
-            "UpdateAccount" {
+                "UpdateAccount" {
                     if ($correlatedAccount.EmployeeId -ne $account.EmployeeId) {
-                        $queryUpdateSet = "SET [EmployeeId]=$($account.EmployeeId) [LastModified]=$($account.LastModified)"
+                        $queryUpdateSet = "SET [EmployeeId]=$($account.EmployeeId), [LastModified]='$($account.LastModified)'"
                         $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
-                    
+
                         $queryUpdateSplatParams = @{
                             ConnectionString = $connectionString
                             Username         = $username
@@ -204,8 +188,9 @@ try {
                                 Message = "Successfully updated row with attributeValue [$attributeValue]."
                                 IsError = $false
                             })
-                    } else {
-                         Write-Verbose "Nothing to update for person"
+                    }
+                    else {
+                        Write-Verbose "Nothing to update for person"
                     }
                     break
                 }
@@ -214,11 +199,11 @@ try {
         catch {
             $ex = $PSItem
             $auditErrorMessage = $ex.Exception.Message
-            Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+            Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
             $outputContext.auditlogs.Add([PSCustomObject]@{
-                Message = "Failed to inserte data into table [$table] with attributeValue [$attributeValue]: $($auditErrorMessage)"
-                IsError = $true
-            })
+                    Message = "Failed to inserte data into table [$table] with attributeValue [$attributeValue]: $($auditErrorMessage)"
+                    IsError = $true
+                })
         }
     }
 }

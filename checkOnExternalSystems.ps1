@@ -1,11 +1,8 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-SQL
-#
-# Version: 1.0.0
 #####################################################
 
 # Initialize default values
-$p = $person | ConvertFrom-Json
 $success = $false # Set to false at start, at the end, only when no error occurs it is set to true
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 $NonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
@@ -31,7 +28,7 @@ $connectionString = $c.connectionString
 
 #region Change mapping here; make sure the tables exist, see the readme on github for more info
 $attributeNames = @('SamAccountName', 'UserPrincipalName')
-      
+
 # Raise iteration of all configured fields when one is not unique
 $syncIterations = $true
 #endregion Change mapping here
@@ -98,18 +95,18 @@ function Invoke-SQLQuery {
 try {
 
     $valuesToCheck = [PSCustomObject]@{}
-    foreach ($attributeName in $attributeNames) {    
-        if ($a.PsObject.Properties.Name -contains $attributeName) {     
+    foreach ($attributeName in $attributeNames) {
+        if ($a.PsObject.Properties.Name -contains $attributeName) {
             $valuesToCheck | Add-Member -MemberType NoteProperty -Name $attributeName -Value $a.$attributeName
         }
     }
     if (-not[String]::IsNullOrEmpty($valuesToCheck)) {
-        
+
         # Query current data in database
         foreach ($attribute in $valuesToCheck.PSObject.Properties) {
-            try {                
+            try {
                 $querySelect = "SELECT * FROM $($attribute.Name) WHERE [AttributeValue] = '$($attribute.Value)'"
-                
+
                 $querySelectSplatParams = @{
                     ConnectionString = $connectionString
                     Username         = $username
@@ -117,7 +114,7 @@ try {
                     SqlQuery         = $querySelect
                     ErrorAction      = "Stop"
                 }
-                
+
                 $querySelectResult = [System.Collections.ArrayList]::new()
                 Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
                 $selectRowCount = ($querySelectResult | measure-object).count
@@ -154,7 +151,7 @@ catch {
     $ex = $PSItem
     # Set Verbose error message
     $verboseErrorMessage = $ex.Exception.Message
-    
+
     # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
@@ -180,6 +177,5 @@ finally {
         # Add field name as string when field is not unique
         NonUniqueFields = $NonUniqueFields
     }
-    Write-Warning ($result | ConvertTo-Json -Depth 10)
     Write-Output ($result | ConvertTo-Json -Depth 10)
 }
