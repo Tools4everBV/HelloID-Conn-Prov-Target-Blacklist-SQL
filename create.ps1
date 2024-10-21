@@ -4,16 +4,12 @@
 # Script can be used as a create and update script
 #####################################################
 
-# Initialize default values
-$c = $actionContext.configuration
-
 # Set debug logging
-switch ($($c.isDebug)) {
+switch ($($actionContext.configuration.isDebug)) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
-
-$actionContext.DryRun = $false
+					  
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -85,21 +81,28 @@ function Invoke-SQLQuery {
 
 try {
     # Used to connect to SQL server.
-    $connectionString = $c.connectionString
-    $username = $c.username
-    $password = $c.password
+    $connectionString = $actionContext.configuration.connectionString
+    $username = $actionContext.configuration.username
+    $password = $actionContext.configuration.password
+    $table = $actionContext.configuration.table
 
-    $tables = $($actionContext.Data | Select-Object * -ExcludeProperty EmployeeId, LastModified).PSObject.Properties.Name 
+    $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted).PSObject.Properties.Name
 
-    foreach ($table in $tables) {
+    foreach ($attributeName in $attributeNames) {
         try {
-            $attributeValue = $actionContext.Data.$table
-            $account = $actionContext.Data | Select-Object * -ExcludeProperty $tables
-            $account | Add-Member -NotePropertyName 'AttributeValue' -NotePropertyValue $attributeValue
+
+            $attributeValue = $actionContext.Data.$attributeName -Replace "'", "''"
+																 
+			
+												  
+			
+            $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
+            $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
+            $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
 
             # Enclose Property Names with brackets []
             $querySelectProperties = $("[" + ($($account.PSObject.Properties.Name) -join "],[") + "]")
-            $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [AttributeValue] = '$attributeValue'"
+            $querySelect = "SELECT $($querySelectProperties) FROM [$table] WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
             Write-verbose "Querying data from table [$table]. Query: $($querySelect)"
 
             $querySelectSplatParams = @{
@@ -113,7 +116,7 @@ try {
             Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
             $selectRowCount = ($querySelectResult | measure-object).count
-            Write-Verbose "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
+            Write-Verbose "Successfully queried data for attribute [$attributeName]. Query: $($querySelect). Returned rows: $selectRowCount"
 
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
@@ -125,7 +128,7 @@ try {
                 $action = "CreateAccount"
             }
             else {
-                Throw "multiple ($selectRowCount) rows found with attribute [$table]"
+                Throw "multiple ($selectRowCount) rows found with attribute [$attributeName]"
             }
 
 
@@ -148,22 +151,22 @@ try {
 
                     $queryInsertResult = [System.Collections.ArrayList]::new()
                     if (-not($actioncontext.dryRun -eq $true)) {
-                        Write-Verbose "Inserting row into table [$table]. Query: $($queryInsert)"
+                        Write-Verbose "Inserting row for attribute [$attributeName] and value [$attributeValue]. Query: $($queryInsert)"
                         Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
                     }
                     else {
-                        Write-Warning "DryRun: Would insert row into table [$table]. Query: $($queryInsert)"
+                        Write-Warning "DryRun: Would insert row for attribute [$attributeName] and value [$attributeValue]. Query: $($queryInsert)"
                     }
                     $outputContext.AccountReference = $account.employeeId
                     $outputContext.auditlogs.Add([PSCustomObject]@{
-                            Message = "Successfully inserted row into table [$table] with attributeValue [$attributeValue]"
+                            Message = "Successfully inserted row for attribute [$attributeName] and value [$attributeValue]"
                             IsError = $false
                         })
                     break
                 }
                 "UpdateAccount" {
-                    if ($correlatedAccount.EmployeeId -ne $account.EmployeeId) {
-                        $queryUpdateSet = "SET [EmployeeId]=$($account.EmployeeId), [LastModified]='$($account.LastModified)'"
+                    if ($correlatedAccount.employeeId -ne $account.employeeId -or $correlatedAccount.whenDeleted -ne '') {
+                        $queryUpdateSet = "SET [employeeId]='$($account.employeeId)', [whenDeleted]=null"
                         $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
 
                         $queryUpdateSplatParams = @{
@@ -180,12 +183,12 @@ try {
                             Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
                         }
                         else {
-                            Write-Warning "DryRun: Would update row from table [$table]. Query: $($queryUpdate)"
+                            Write-Warning "DryRun: Would update updated row for attribute [$attributeName] and value [$attributeValue]. Query: $($queryUpdate)"
                         }
                         $outputContext.AccountReference = $account.employeeId
 
                         $outputContext.auditlogs.Add([PSCustomObject]@{
-                                Message = "Successfully updated row with attributeValue [$attributeValue]."
+                                Message = "Successfully updated row for attribute [$attributeName] and value [$attributeValue]"
                                 IsError = $false
                             })
                     }
@@ -201,7 +204,7 @@ try {
             $auditErrorMessage = $ex.Exception.Message
             Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
             $outputContext.auditlogs.Add([PSCustomObject]@{
-                    Message = "Failed to inserte data into table [$table] with attributeValue [$attributeValue]: $($auditErrorMessage)"
+                    Message = "Failed to insert data into table [$table] for attribute [$attributeName] with value [$attributeValue]: $($auditErrorMessage)"
                     IsError = $true
                 })
         }
