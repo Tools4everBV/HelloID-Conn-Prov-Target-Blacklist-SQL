@@ -2,43 +2,7 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "SamAccountName",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update",
-            "Delete"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getSamAccountName() {\\r\\n    let samAccountName = '';\\r\\n\\r\\n    if (typeof Person.Accounts._8b627f10661e481cb21a703ca27988bd.sAMAccountName !== 'undefined' && Person.Accounts._8b627f10661e481cb21a703ca27988bd.sAMAccountName) {\\r\\n        samAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    return samAccountName;\\r\\n}\\r\\n\\r\\ngetSamAccountName()\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
-      "Name": "UserPrincipalName",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update",
-            "Delete"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n\\r\\n    if (typeof Person.Accounts._8b627f10661e481cb21a703ca27988bd.userPrincipalName !== 'undefined' && Person.Accounts._8b627f10661e481cb21a703ca27988bd.userPrincipalName) {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\ngetUserPrincipalName()\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
-      "Name": "EmployeeId",
+      "Name": "employeeId",
       "Description": "",
       "Type": "Text",
       "MappingActions": [
@@ -56,7 +20,23 @@
       ]
     },
     {
-      "Name": "LastModified",
+      "Name": "whenDeleted",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n    //let dateText = date.toDateString();\\n    //return dateText;\\n}\\n\\ngetDate();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "SamAccountName",
       "Description": "",
       "Type": "Text",
       "MappingActions": [
@@ -67,7 +47,25 @@
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n    //let dateText = date.toDateString();\\n    //return dateText;\\n}\\n\\ngetDate();\"",
+          "Value": "\"function getSamAccountName() {\\r\\n    let samAccountName = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.sAMAccountName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.sAMAccountName) {\\r\\n        samAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    return samAccountName;\\r\\n}\\r\\n\\r\\ngetSamAccountName()\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "UserPrincipalName",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update",
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\ngetUserPrincipalName()\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }

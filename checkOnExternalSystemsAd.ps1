@@ -1,6 +1,6 @@
-#####################################################
+#########################################################################
 # HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-AD-SQL
-#####################################################
+#########################################################################
 
 #Todo: Exclude person.externalId from search
 
@@ -107,8 +107,8 @@ try {
         # Query current data in database
         foreach ($attribute in $valuesToCheck.PSObject.Properties) {
             try {
-                    
-                $querySelect = "SELECT * FROM [$table]  WHERE [attributeName] = $($attribute.Name) AND  [attributeValue] = '$($attribute.Value)'"
+
+                $querySelect = "SELECT * FROM [$table] WHERE [attributeName] = '$($attribute.Name)' AND  [attributeValue] = '$($attribute.Value)'"
 
                 $querySelectSplatParams = @{
                     ConnectionString = $connectionString
@@ -124,11 +124,11 @@ try {
                 Write-Verbose "Successfully queried data from table [$table] for attribute [$($attribute.Name)]. Query: $($querySelect). Returned rows: $selectRowCount)"
 
                 if ($selectRowCount -ne 0) {
-                    Write-Warning "$($attribute.Name) value [$($attribute.Value)] is NOT unique in table [$($attribute.Name)]"
+                    Write-Warning "$($attribute.Name) value [$($attribute.Value)] is NOT unique in blacklist table [$table]"
                     [void]$NonUniqueFields.Add($attribute.Name)
                 }
                 else {
-                    Write-Verbose "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$($attribute.Name)]"
+                    Write-Verbose "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
                 }
             } catch {
                 $ex = $PSItem
