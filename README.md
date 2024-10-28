@@ -1,4 +1,5 @@
 # HelloID-Conn-Prov-Target-Blacklist-SQL
+
 Repository for HelloID Provisioning Target Connector to SQL Blacklist
 
 <a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/network/members"><img src="https://img.shields.io/github/forks/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL" alt="Forks Badge"/></a>
@@ -15,47 +16,62 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
 </p>
 
 ## Table of Contents
+
 - [HelloID-Conn-Prov-Target-Blacklist-SQL](#helloid-conn-prov-target-blacklist-sql)
   - [Table of Contents](#table-of-contents)
-  - [Requirements](#requirements)
   - [Introduction](#introduction)
-    - [Connection settings](#connection-settings)
+  - [Requirements](#requirements)
+  - [Repository contents](#repository-contents)
+  - [Connection settings](#connection-settings)
   - [Remarks](#remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
-## Requirements
-- SQL database
-
 ## Introduction
-With this connector we have the option to write unique values, e.g. SamAccountName and/or UserPrincipalName to a blacklist database.
+
+This connector allows for the storage of attribute values that must remain unique, such as SamAccountName and/or UserPrincipalName, in a blacklist database. When a new account is created, this database is checked alongside the primary target system to verify the uniqueness of these account attributes.
+
+## Requirements
+
+- HelloID Provisioning agent (cloud or on-prem).
+- Available MSSQL database (External server or local SQL(express) instance).
+- SQL database setup containing a table created with the query in the createTableBlacklist.sql file.
+- Rights to database for the agent's service account or use a SQL-authenticated account.
+- (Optional) Database table is filled with the current AD data.
+
+## Repository contents
 
 The HelloID connector consists of the template scripts shown in the following table.
 
 | Action                            | Action(s) Performed                             | Comment                                                                                                                                                                   |
 | --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| create.useDataFromOthersystem.ps1 | Write account data to SQL DB table              | Uses account data from another system like AD or Azure AD                                                                                                                 |
-| create.generateUniqueData.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for you AD or Azure AD system  |
-| checkOnExternalSystems.ps1        | Check mapped fields against SQL DB              | This is configured in the built-in AD connector                                                                                                                           |
+| create.ps1 | Write account data to SQL DB table             | Uses account data from another system. Can also be used as an update script |
+| delete.ps1 | Write whenDeleted date to SQL DB table             | Uses account data from another system. Can also be used as an update script |
+| configuration.json | Default configuration file             ||
+| fieldMapping.json | Default field mapping file             ||
+| checkOnExternalSystemsAd.ps1        | Check mapped fields against the SQL database              | This is configured in the built-in Active Directory connector |
+| createTableBlacklist.sql        | Script to create the SQL table in the SQL database              |Run this within the SQL Management Studio|
+
+| /GenerateUniqueData/create.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for your AD or Azure AD system  |
 
 > [!IMPORTANT]
-> create.generateUniqueData.ps1 is not converted to PS v2 connector yet.
+> /GenerateUniqueData/create.ps1 is not converted to PS v2 connector yet.
 
 ### Connection settings
+
 The following settings are required to connect to SQL DB.
 
 | Setting           | Description                                                                  | Mandatory |
 | ----------------- | ---------------------------------------------------------------------------- | --------- |
 | Connection string | String value of the connection string used to connect to the SQL database    | Yes       |
+| Table             | String value of the table name in which the blacklist values reside          | Yes       |
 | Username          | String value of the username of the SQL user to use in the connection string | No        |
 | Password          | String value of the password of the SQL user to use in the connection string | No        |
-| Table             | String value of the table name in which the blacklist values reside          | Yes       |
+| isDebug           | Toggle debug logging                                                         | No        |
 
+## Correlation configuration
 
-## Provisioning PowerShell V2 connector
-
-### Correlation configuration
-The correlation configuration is used to specify which properties will be used to match an existing account within {connectorName} to a person in HelloID.
+The correlation configuration is used to specify which properties will be used to match the existing blacklist entries to a person in HelloID. This configuration is used in the delete script, only when a (source)person is deleted from HelloID.
 
 Specify the following configuration:
 
@@ -63,29 +79,20 @@ Specify the following configuration:
 | ------------------------- | ------------ |
 | Enable correlation        | `True`       |
 | Person correlation field  | `[externalID(default)]` |
-| Account correlation field | `[Account correlation Field]` |
-
-
-### Mappings
-A basic mapping ([_fieldMapping.json_](./fieldMapping.json)) is provided. Make sure to further customize these accordingly.
-
-### Prerequisites
-
-- [ ] HelloID Provisioning agent (cloud or on-prem).
-- [ ] Available MSSQL database (External server or Local (express) instance)
-- [ ] Rights to database for the Agent's service account or use a SQL-authenticated account.
+| Account correlation field | `EmployeeId` |
 
 ## Remarks
-- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and needs additional configuration.
-- Will generate a SELECT and INSERT-query with all the configured fields from the mapping.
-- Keeps the mapping names the same as the column names in the database.
-- The configured correlation will be used in the WHERE condition to filter out the same person.
 
+- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and needs additional configuration.
+- Make sure the attribute names in the mapping correspond with the attribute names in the primary source system.
+- The configured correlation is only used in the delete script
 
 ## Getting help
+>
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_
 
 > _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_
 
 ## HelloID docs
-The official HelloID documentation can be found at: https://docs.helloid.com/
+
+The official HelloID documentation can be found at: <https://docs.helloid.com/>
