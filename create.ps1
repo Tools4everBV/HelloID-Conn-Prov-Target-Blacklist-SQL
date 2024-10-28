@@ -9,7 +9,7 @@ switch ($($actionContext.configuration.isDebug)) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
-					  
+
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]

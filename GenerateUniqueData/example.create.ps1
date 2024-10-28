@@ -1,12 +1,8 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Blacklist-Create-SQL
+# HelloID-Conn-Prov-Target-Blacklist-Create-SQL-Unique
 #
-# Version: 1.0.0
 #####################################################
 # Initialize default values
-
-write-warning "not (yet) converted to PSv2"
-break
 
 $c = $configuration | ConvertFrom-Json
 $p = $person | ConvertFrom-Json
@@ -18,8 +14,6 @@ switch ($($c.isDebug)) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
 
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
@@ -213,7 +207,7 @@ try {
             ($($queryInsertProperties))
         VALUES
             ($($queryInsertValues))"
-            
+
         if (-not($dryRun -eq $true)) {
             Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
 

@@ -51,11 +51,7 @@ The HelloID connector consists of the template scripts shown in the following ta
 | fieldMapping.json | Default field mapping file             ||
 | checkOnExternalSystemsAd.ps1        | Check mapped fields against the SQL database              | This is configured in the built-in Active Directory connector |
 | createTableBlacklist.sql        | Script to create the SQL table in the SQL database              |Run this within the SQL Management Studio|
-
-| /GenerateUniqueData/create.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for your AD or Azure AD system  |
-
-> [!IMPORTANT]
-> /GenerateUniqueData/create.ps1 is not converted to PS v2 connector yet.
+| /GenerateUniqueData/example.create.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for your AD or Azure AD system. Please be aware this is an example build for the legacy PowerShell connector.  |
 
 ### Connection settings
 
