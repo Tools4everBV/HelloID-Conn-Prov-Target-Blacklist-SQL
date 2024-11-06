@@ -2,20 +2,15 @@
 # HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-AD-SQL
 #########################################################################
 
-#Todo: Exclude person.externalId from search
-
 # Initialize default values
 $success = $false # Set to false at start, at the end, only when no error occurs it is set to true
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 $NonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-# The entitlementContext contains the configuration
-# - configuration: The configuration that is set in the Custom PowerShell configuration
 $eRef = $entitlementContext | ConvertFrom-Json
 $c = $eRef.configuration
-
-# The account object contains the account mapping that is configured
 $a = $account | ConvertFrom-Json
+$p = $person | ConvertFrom-Json
 
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
@@ -26,6 +21,10 @@ $attributeNames = @('SamAccountName', 'UserPrincipalName')
 
 # Raise iteration of all configured fields when one is not unique
 $syncIterations = $true
+
+# Exclude self from query
+$excludeSelf = $true
+
 #endregion Change mapping here
 
 #region functions
@@ -99,8 +98,10 @@ try {
         # Query current data in database
         foreach ($attribute in $valuesToCheck.PSObject.Properties) {
             try {
-
                 $querySelect = "SELECT * FROM [$table] WHERE [attributeName] = '$($attribute.Name)' AND  [attributeValue] = '$($attribute.Value)'"
+                if ($excludeSelf) {
+                    $querySelect = "$querySelect AND NOT [EmployeeId] = '$($p.ExternalId)'"
+                }
 
                 $querySelectSplatParams = @{
                     ConnectionString = $connectionString

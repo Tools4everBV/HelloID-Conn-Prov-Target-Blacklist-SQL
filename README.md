@@ -22,6 +22,7 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
   - [Requirements](#requirements)
   - [Repository contents](#repository-contents)
   - [Connection settings](#connection-settings)
+  - [Settings in AD Uniqueness script](#settings-in-ad-uniqueness-script)
   - [Remarks](#remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
@@ -62,11 +63,19 @@ The following settings are required to connect to SQL DB.
 | Table             | String value of the table name in which the blacklist values reside          | Yes       |
 | Username          | String value of the username of the SQL user to use in the connection string | No        |
 | Password          | String value of the password of the SQL user to use in the connection string | No        |
-| isDebug           | Toggle debug logging                                                         | No        |
 
 ## Correlation configuration
 
 The correlation configuration is not used or required in this connector
+
+## Settings in AD Uniqueness script
+The following settings can and should be set in the AD Uniquess script
+
+| Setting           | Description                                                            | Default value |
+| ----------------- | ---------------------------------------------------------------------- | ---------------------------------------- |
+| $attributeNames   | Array list of the attributes to check                                  | @('SamAccountName', 'UserPrincipalName') |
+| $syncIterations   | Raise iteration of all configured fields when one is not unique        | $true |
+| $excludeSelf      | Exclude the records bound to the externalId of the user from the query | $true |
 
 ## Remarks
 
