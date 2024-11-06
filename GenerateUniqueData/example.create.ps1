@@ -9,12 +9,6 @@ $p = $person | ConvertFrom-Json
 $success = $false # Set to false at start, at the end, only when no error occurs it is set to true
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
 
-# Set debug logging
-switch ($($c.isDebug)) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
 $username = $c.username
@@ -81,7 +75,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -106,7 +100,7 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Verbose "Successfully disconnected from SQL database"
+            Write-Information "Successfully disconnected from SQL database"
         }
     }
 }
@@ -123,7 +117,7 @@ try {
         FROM
             $table"
 
-        Write-Verbose "Querying data from table [$($table)]. Query: $($querySelect)"
+        Write-Information "Querying data from table [$($table)]. Query: $($querySelect)"
 
         $querySelectSplatParams = @{
             ConnectionString = $connectionString
@@ -135,7 +129,7 @@ try {
         $querySelectResult = [System.Collections.ArrayList]::new()
         Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
 
-        Write-Verbose "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
+        Write-Information "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
     }
     catch {
         $ex = $PSItem
@@ -144,7 +138,7 @@ try {
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
         $auditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
                 Message = "Error querying data from table [$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
@@ -160,7 +154,7 @@ try {
         # Format input range to specified amount of chars, prefix and/or suffix
         $inputRange = $inputRange | ForEach-Object { "$prefix{0:d$amountOfChars}$suffix" -f $_ }
 
-        Write-Verbose "Generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist"
+        Write-Information "Generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist"
 
         $currentValues = $querySelectResult."$($column)" | Sort-Object
         $excludeRange = $currentValues
@@ -175,7 +169,7 @@ try {
         # Set SamAccountName of Account object with generated unique value
         $account.SamAccountName = $uniqueValue
 
-        Write-Verbose "Successfully generated random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist: [$($uniqueValue)]"
+        Write-Information "Successfully generated random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist: [$($uniqueValue)]"
     }
     catch {
         $ex = $PSItem
@@ -184,7 +178,7 @@ try {
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
         $auditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
                 Message = "Error generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist. Error Message: $auditErrorMessage"
@@ -209,7 +203,7 @@ try {
             ($($queryInsertValues))"
 
         if (-not($dryRun -eq $true)) {
-            Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
+            Write-Information "Inserting data into table [$($table)]. Query: $($queryInsert)"
 
             $queryInsertSplatParams = @{
                 ConnectionString = $connectionString
@@ -239,7 +233,7 @@ try {
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
         $auditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
                 Message = "Error inserting data into table [$($table)]. Query: $($queryInsert). Error Message: $($auditErrorMessage)"
@@ -259,7 +253,7 @@ catch {
     # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
-    Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
     $auditLogs.Add([PSCustomObject]@{
             # Action  = "" # Optional
             Message = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"

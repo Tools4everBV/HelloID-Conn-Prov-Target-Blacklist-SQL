@@ -4,12 +4,6 @@
 # Script can be used as a create and update script
 #####################################################
 
-# Set debug logging
-switch ($($actionContext.configuration.isDebug)) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -44,12 +38,12 @@ function Invoke-SQLQuery {
         }
         # Connect to the SQL server
         $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
-        $SqlConnection.ConnectionString = "$ConnectionString"
+        $SqlConnection.ConnectionString = "$actionContext.configuration.connectionString"
         if (-not[String]::IsNullOrEmpty($sqlCredential)) {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -74,16 +68,12 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Verbose "Successfully disconnected from SQL database"
+            Write-Information "Successfully disconnected from SQL database"
         }
     }
 }
 
 try {
-    # Used to connect to SQL server.
-    $connectionString = $actionContext.configuration.connectionString
-    $username = $actionContext.configuration.username
-    $password = $actionContext.configuration.password
     $table = $actionContext.configuration.table
 
     $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted).PSObject.Properties.Name
@@ -92,10 +82,6 @@ try {
         try {
 
             $attributeValue = $actionContext.Data.$attributeName -Replace "'", "''"
-																 
-			
-												  
-			
             $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
             $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
             $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
@@ -103,12 +89,12 @@ try {
             # Enclose Property Names with brackets []
             $querySelectProperties = $("[" + ($($account.PSObject.Properties.Name) -join "],[") + "]")
             $querySelect = "SELECT $($querySelectProperties) FROM [$table] WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
-            Write-verbose "Querying data from table [$table]. Query: $($querySelect)"
+            Write-Information "Querying data from table [$table]. Query: $($querySelect)"
 
             $querySelectSplatParams = @{
-                ConnectionString = $connectionString
-                Username         = $username
-                Password         = $password
+                ConnectionString = $actionContext.configuration.connectionString
+                Username         = $actionContext.configuration.username
+                Password         = $actionContext.configuration.password
                 SqlQuery         = $querySelect
                 ErrorAction      = "Stop"
             }
@@ -116,7 +102,7 @@ try {
             Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
             $selectRowCount = ($querySelectResult | measure-object).count
-            Write-Verbose "Successfully queried data for attribute [$attributeName]. Query: $($querySelect). Returned rows: $selectRowCount"
+            Write-Information "Successfully queried data for attribute [$attributeName]. Query: $($querySelect). Returned rows: $selectRowCount"
 
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
@@ -131,7 +117,6 @@ try {
                 Throw "multiple ($selectRowCount) rows found with attribute [$attributeName]"
             }
 
-
             # Update blacklist database
             switch ($action) {
                 "CreateAccount" {
@@ -142,16 +127,16 @@ try {
                     $queryInsert = "INSERT INTO $table ($($queryInsertProperties)) VALUES ($($queryInsertValues))"
 
                     $queryInsertSplatParams = @{
-                        ConnectionString = $connectionString
-                        Username         = $username
-                        Password         = $password
+                        ConnectionString = $actionContext.configuration.connectionString
+                        Username         = $actionContext.configuration.username
+                        Password         = $actionContext.configuration.password
                         SqlQuery         = $queryInsert
                         ErrorAction      = "Stop"
                     }
 
                     $queryInsertResult = [System.Collections.ArrayList]::new()
                     if (-not($actioncontext.dryRun -eq $true)) {
-                        Write-Verbose "Inserting row for attribute [$attributeName] and value [$attributeValue]. Query: $($queryInsert)"
+                        Write-Information "Inserting row for attribute [$attributeName] and value [$attributeValue]. Query: $($queryInsert)"
                         Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
                     }
                     else {
@@ -170,16 +155,16 @@ try {
                         $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
 
                         $queryUpdateSplatParams = @{
-                            ConnectionString = $connectionString
-                            Username         = $username
-                            Password         = $password
+                            ConnectionString = $actionContext.configuration.connectionString
+                            Username         = $actionContext.configuration.username
+                            Password         = $actionContext.configuration.password
                             SqlQuery         = $queryUpdate
                             ErrorAction      = "Stop"
                         }
 
                         $queryUpdateResult = [System.Collections.ArrayList]::new()
                         if (-not($actioncontext.dryRun -eq $true)) {
-                            Write-Verbose "Updating row from table [$table]. Query: $($queryUpdate)"
+                            Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
                             Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
                         }
                         else {
@@ -193,7 +178,7 @@ try {
                             })
                     }
                     else {
-                        Write-Verbose "Nothing to update for person"
+                        Write-Information "Nothing to update for person"
                     }
                     break
                 }
@@ -213,7 +198,12 @@ try {
 catch {
     $ex = $PSItem
     $auditErrorMessage = $ex.Exception.Message
-    #Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+
+    $outputContext.auditlogs.Add([PSCustomObject]@{
+        Message = "Generic error: $($auditErrorMessage)"
+        IsError = $true
+    })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

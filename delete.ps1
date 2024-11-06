@@ -3,12 +3,6 @@
 # Use data from dependent system
 #####################################################
 
-# Set debug logging
-switch ($($actionContext.configuration.isDebug)) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -34,10 +28,10 @@ function Invoke-SQLQuery {
             # First create the PSCredential object
             $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
             $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
- 
+
             # Set the password as read only
             $credential.Password.MakeReadOnly()
- 
+
             # Create the SqlCredential object
             $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
         }
@@ -48,7 +42,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -73,16 +67,12 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Verbose "Successfully disconnected from SQL database"
+            Write-Information "Successfully disconnected from SQL database"
         }
     }
 }
 
 try {
-    # Used to connect to SQL server.
-    $connectionString = $actionContext.configuration.connectionString
-    $username = $actionContext.configuration.username
-    $password = $actionContext.configuration.password
     $table = $actionContext.configuration.table
 
     $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted).PSObject.Properties.Name
@@ -102,12 +92,12 @@ try {
             else {
                 $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
             }
-            Write-verbose "Querying data from table [$table]. Query: $($querySelect)"
+            Write-Information "Querying data from table [$table]. Query: $($querySelect)"
 
             $querySelectSplatParams = @{
-                ConnectionString = $connectionString
-                Username         = $username
-                Password         = $password
+                ConnectionString = $actionContext.configuration.connectionString
+                Username         = $actionContext.configuration.username
+                Password         = $actionContext.configuration.password
                 SqlQuery         = $querySelect
                 ErrorAction      = "Stop"
             }
@@ -115,7 +105,7 @@ try {
             Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
             $selectRowCount = ($querySelectResult | measure-object).count
-            Write-Verbose "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
+            Write-Information "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
 
             if ($selectRowCount -eq 1) {
                 $action = "UpdateAccount"
@@ -130,7 +120,7 @@ try {
             # Update blacklist database
             switch ($action) {
                 "Skip" {
-                    Write-Verbose "Skipping action query select returned 0 results for table [$table]. Query: $($querySelect)"
+                    Write-Information "Skipping action query select returned 0 results for table [$table]. Query: $($querySelect)"
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             Message = "No row found in blacklist for attribute [$table] and employeeId [$($actionContext.References.Account)]"
@@ -152,15 +142,15 @@ try {
                     }
 
                     $queryUpdateSplatParams = @{
-                        ConnectionString = $connectionString
-                        Username         = $username
-                        Password         = $password
+                        ConnectionString = $actionContext.configuration.connectionString
+                        Username         = $actionContext.configuration.username
+                        Password         = $actionContext.configuration.password
                         SqlQuery         = $queryUpdate
                         ErrorAction      = "Stop"
                     }
 
                     if (-not($actioncontext.dryRun -eq $true)) {
-                        Write-Verbose "Updating row from table [$table]. Query: $($queryUpdate)"
+                        Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
                         $queryUpdateResult = [System.Collections.ArrayList]::new()
                         Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
                     }
@@ -191,7 +181,12 @@ try {
 catch {
     $ex = $PSItem
     $auditErrorMessage = $ex.Exception.Message
-    #Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+
+    $outputContext.auditlogs.Add([PSCustomObject]@{
+            Message = "Generic error: $($auditErrorMessage)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

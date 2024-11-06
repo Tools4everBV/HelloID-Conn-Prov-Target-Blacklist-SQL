@@ -2,24 +2,6 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "employeeId",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update",
-            "Delete"
-          ],
-          "MappingMode": "Field",
-          "Value": "\"Person.ExternalId\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
       "Name": "whenDeleted",
       "Description": "",
       "Type": "Text",
@@ -43,7 +25,6 @@
         {
           "MapForActions": [
             "Create",
-            "Update",
             "Delete"
           ],
           "MappingMode": "Complex",
@@ -61,13 +42,29 @@
         {
           "MapForActions": [
             "Create",
-            "Update",
             "Delete"
           ],
           "MappingMode": "Complex",
           "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\ngetUserPrincipalName()\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
+        }
+      ]
+    },
+    {
+      "Name": "employeeId",
+      "Description": "",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Delete"
+          ],
+          "MappingMode": "Field",
+          "Value": "\"Person.ExternalId\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
         }
       ]
     }

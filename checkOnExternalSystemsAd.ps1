@@ -17,14 +17,6 @@ $c = $eRef.configuration
 # The account object contains the account mapping that is configured
 $a = $account | ConvertFrom-Json
 
-# Set debug logging
-switch ($($c.isDebug)) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
 $table = $c.table
@@ -64,7 +56,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database"
+        Write-Information "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -89,7 +81,7 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Verbose "Successfully disconnected from SQL database"
+            Write-Information "Successfully disconnected from SQL database"
         }
     }
 }
@@ -121,14 +113,14 @@ try {
                 $querySelectResult = [System.Collections.ArrayList]::new()
                 Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
                 $selectRowCount = ($querySelectResult | measure-object).count
-                Write-Verbose "Successfully queried data from table [$table] for attribute [$($attribute.Name)]. Query: $($querySelect). Returned rows: $selectRowCount)"
+                Write-Information "Successfully queried data from table [$table] for attribute [$($attribute.Name)]. Query: $($querySelect). Returned rows: $selectRowCount)"
 
                 if ($selectRowCount -ne 0) {
                     Write-Warning "$($attribute.Name) value [$($attribute.Value)] is NOT unique in blacklist table [$table]"
                     [void]$NonUniqueFields.Add($attribute.Name)
                 }
                 else {
-                    Write-Verbose "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
+                    Write-Information "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
                 }
             } catch {
                 $ex = $PSItem
@@ -137,7 +129,7 @@ try {
                 # Set Audit error message
                 $auditErrorMessage = $ex.Exception.Message
 
-                Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+                Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
                 $auditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
                         Message = "Error checking mapped values against database data. Error Message: $($auditErrorMessage)"
@@ -158,7 +150,7 @@ catch {
     # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
-    Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
     # Use throw, as auditLogs are not available in check on external system
     throw "Error performing uniqueness check on external systems. Error Message: $($auditErrorMessage)"
 }

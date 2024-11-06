@@ -43,15 +43,5 @@
       "description": "Optional: The username of the SQL user to use in the connection string",
       "required": false
     }
-  },
-  {
-    "key": "isDebug",
-    "type": "checkbox",
-    "defaultValue": false,
-    "templateOptions": {
-      "label": "Toggle debug logging",
-      "description": "When toggled, debug logging will be displayed",
-      "required": false
-    }
   }
 ]
