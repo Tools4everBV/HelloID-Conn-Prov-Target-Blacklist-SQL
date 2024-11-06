@@ -7,9 +7,8 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
 <a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/issues"><img src="https://img.shields.io/github/issues/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL" alt="Issues Badge"/></a>
 <a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/graphs/contributors"><img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL?color=2b9348"></a>
 
-| :information_source: Information |
-| :------------------------------- |
-| This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.  |
+> [!IMPORTANT]
+> This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
   <img src="https://cdn-icons-png.flaticon.com/128/4443/4443857.png">
@@ -53,7 +52,7 @@ The HelloID connector consists of the template scripts shown in the following ta
 | createTableBlacklist.sql        | Script to create the SQL table in the SQL database              |Run this within the SQL Management Studio|
 | /GenerateUniqueData/example.create.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for your AD or Azure AD system. Please be aware this is an example build for the legacy PowerShell connector.  |
 
-### Connection settings
+## Connection settings
 
 The following settings are required to connect to SQL DB.
 
@@ -67,28 +66,19 @@ The following settings are required to connect to SQL DB.
 
 ## Correlation configuration
 
-The correlation configuration is used to specify which properties will be used to match the existing blacklist entries to a person in HelloID. This configuration is used in the delete script, only when a (source)person is deleted from HelloID.
-
-Specify the following configuration:
-
-| Setting                   | Value        |
-| ------------------------- | ------------ |
-| Enable correlation        | `True`       |
-| Person correlation field  | `[externalID(default)]` |
-| Account correlation field | `EmployeeId` |
+The correlation configuration is not used or required in this connector
 
 ## Remarks
 
-- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and needs additional configuration.
+- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and requires additional configuration.
 - Make sure the attribute names in the mapping correspond with the attribute names in the primary source system.
-- The configured correlation is only used in the delete script
+- If you need to update the values as well, you can use the account creation script as an update script without modification. Just remember to update the mapping, too.
 
 ## Getting help
->
-> _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_
-
-> _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_
+> [!TIP]
+> _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
+> [!TIP]
+> _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_.
 
 ## HelloID docs
-
-The official HelloID documentation can be found at: <https://docs.helloid.com/>
+The official HelloID documentation can be found at: https://docs.helloid.com/.
