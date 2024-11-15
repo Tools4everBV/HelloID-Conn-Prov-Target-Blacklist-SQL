@@ -14,6 +14,8 @@ $p = $person | ConvertFrom-Json
 
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
+$username = $c.username
+$password = $c.password
 $table = $c.table
 
 #region Change mapping here; select which attributes should be checked, see the readme on github for more info
