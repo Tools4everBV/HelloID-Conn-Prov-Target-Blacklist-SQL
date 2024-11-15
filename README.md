@@ -75,7 +75,7 @@ The following settings can and should be set in the AD Uniquess script
 | ----------------- | ---------------------------------------------------------------------- | ---------------------------------------- |
 | $attributeNames   | Array list of the attributes to check                                  | @('SamAccountName', 'UserPrincipalName') |
 | $syncIterations   | Raise iteration of all configured fields when one is not unique        | $true |
-| $attributeNames   | Array list of the extra attributes to return when at least one attribute is not unique. Usually mirrors the AD field mapping configuration. Only active when $syncIterations = $true   | @('SamAccountName', 'UserPrincipalName','commonName', 'mail',"proxyAddresses") |
+| $syncIterationsAttributeNames   | Array list of the extra attributes to return when at least one attribute is not unique. Usually mirrors the AD field mapping configuration. Only active when $syncIterations = $true   | @('SamAccountName', 'UserPrincipalName','commonName', 'mail',"proxyAddresses") |
 | $excludeSelf      | Exclude the records bound to the externalId of the user from the query | $true |
 
 ## Remarks
