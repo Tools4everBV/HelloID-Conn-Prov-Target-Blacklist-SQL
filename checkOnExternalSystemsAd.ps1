@@ -18,11 +18,16 @@ $username = $c.username
 $password = $c.password
 $table = $c.table
 
-#region Change mapping here; select which attributes should be checked, see the readme on github for more info
+#region Change mapping here
+
+# select which attributes should be checked
 $attributeNames = @('SamAccountName', 'UserPrincipalName')
 
 # Raise iteration of all configured fields when one is not unique
 $syncIterations = $true
+
+# Select which attributes should iterate when syncIterations = $true; this usually mirrors the AD field mapping uniqueness configuration
+$syncIterationsAttributeNames = @('SamAccountName', 'UserPrincipalName','commonName', 'mail',"proxyAddresses")
 
 # Exclude self from query
 $excludeSelf = $true
@@ -165,7 +170,7 @@ finally {
 
     # When syncIterations is set to true, set NonUniqueFields to all configured fields
     if (($NonUniqueFields | Measure-Object).Count -ge 1 -and $syncIterations -eq $true) {
-        $NonUniqueFields = $valuesToCheck.PsObject.Properties.Name
+        $NonUniqueFields = $attributeNames + $syncIterationsAttributeNames |Sort-Object -Unique
     }
 
     # Send results
