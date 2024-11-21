@@ -3,6 +3,8 @@
 # Use data from dependent system
 #####################################################
 
+# Only set whenDeleted on all records where column employeeId = externalId
+
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -75,116 +77,84 @@ function Invoke-SQLQuery {
 try {
     $table = $actionContext.configuration.table
 
-    $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted).PSObject.Properties.Name
+    $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
+    $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
+    $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
+    $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [employeeId] = '$($actionContext.References.Account)' AND [WhenDeleted] IS NULL"
 
-    foreach ($attributeName in $attributeNames) {
-        try {
-            $attributeValue = $actionContext.Data.$attributeName
-            $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
-            $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
-            $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
+    Write-Information "Querying data from table [$table]. Query: $($querySelect)"
 
-            # Enclose Property Names with brackets []
-            $querySelectProperties = $("[" + ($($account.PSObject.Properties.Name) -join "],[") + "]")
-            if ([string]::IsNullOrEmpty($attributeValue)) {
-                $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [attributeName] = '$attributeName' AND [employeeId] = '$($actionContext.References.Account)'"
-            }
-            else {
-                $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
-            }
-            Write-Information "Querying data from table [$table]. Query: $($querySelect)"
+    $querySelectSplatParams = @{
+        ConnectionString = $actionContext.configuration.connectionString
+        Username         = $actionContext.configuration.username
+        Password         = $actionContext.configuration.password
+        SqlQuery         = $querySelect
+        ErrorAction      = "Stop"
+    }
 
-            $querySelectSplatParams = @{
+    $querySelectResult = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
+
+    $selectRowCount = ($querySelectResult | measure-object).count
+    Write-Information "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
+
+    if ($selectRowCount -gt 0) {
+        $action = "UpdateAccount"
+    }
+    else {
+        $action = "Skip"
+    }
+
+    # Update blacklist database
+    switch ($action) {
+        "Skip" {
+            Write-Information "Skipping action query select returned 0 results for table [$table]. Query: $($querySelect)"
+
+            $outputContext.auditlogs.Add([PSCustomObject]@{
+                    Message = "No row without a WhenDeleted date found in blacklist for attribute [$table] and employeeId [$($actionContext.References.Account)]"
+                    IsError = $false
+                })
+            break
+        }
+        "UpdateAccount" {
+            $queryUpdateSet = "[whenDeleted]='$($account.whenDeleted)'"
+            $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [employeeId] = '$($actionContext.References.Account)' AND [WhenDeleted] IS NULL"
+            $auditMessage = "Successfully set [whenDeleted] for rows with employeeId [$($actionContext.References.Account)]"
+
+            $queryUpdateSplatParams = @{
                 ConnectionString = $actionContext.configuration.connectionString
                 Username         = $actionContext.configuration.username
                 Password         = $actionContext.configuration.password
-                SqlQuery         = $querySelect
+                SqlQuery         = $queryUpdate
                 ErrorAction      = "Stop"
             }
-            $querySelectResult = [System.Collections.ArrayList]::new()
-            Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
-            $selectRowCount = ($querySelectResult | measure-object).count
-            Write-Information "Successfully queried data from table [$table]. Query: $($querySelect). Returned rows: $selectRowCount"
-
-            if ($selectRowCount -eq 1) {
-                $action = "UpdateAccount"
-            }
-            elseif ($selectRowCount -eq 0) {
-                $action = "Skip"
+            if (-not($actioncontext.dryRun -eq $true)) {
+                Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
+                $queryUpdateResult = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
             }
             else {
-                throw "multiple ($selectRowCount) rows found with attribute [$attributeName]" # IS this a problem?
+                Write-Warning "DryRun: Would update row from table [$table]. Query: $($queryUpdate)"
             }
 
-            # Update blacklist database
-            switch ($action) {
-                "Skip" {
-                    Write-Information "Skipping action query select returned 0 results for table [$table]. Query: $($querySelect)"
-
-                    $outputContext.auditlogs.Add([PSCustomObject]@{
-                            Message = "No row found in blacklist for attribute [$table] and employeeId [$($actionContext.References.Account)]"
-                            IsError = $false
-                        })
-                    break
-                }
-                "UpdateAccount" {
-                    if ([string]::IsNullOrEmpty($attributeValue)) {
-                        $queryUpdateSet = "[whenDeleted]='$($account.whenDeleted)'"
-                        #$queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [employeeId] = '$($actionContext.References.Account)'"
-                        $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [attributeName] = '$attributeName' AND [employeeId] = '$($actionContext.References.Account)'"
-                        $auditMessage = "Successfully updated [whenDeleted] for rows with attribute [$attributeName] and employeeId [$($actionContext.References.Account)]"
-                    }
-                    else {
-                        $queryUpdateSet = "[EmployeeId]='$($account.employeeId)', [whenDeleted]='$($account.whenDeleted)'"
-                        $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
-                        $auditMessage = "Successfully updated [employeeId, whenDeleted] for rows with attribute [$attributeName] and value [$attributeValue]"
-                    }
-
-                    $queryUpdateSplatParams = @{
-                        ConnectionString = $actionContext.configuration.connectionString
-                        Username         = $actionContext.configuration.username
-                        Password         = $actionContext.configuration.password
-                        SqlQuery         = $queryUpdate
-                        ErrorAction      = "Stop"
-                    }
-
-                    if (-not($actioncontext.dryRun -eq $true)) {
-                        Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
-                        $queryUpdateResult = [System.Collections.ArrayList]::new()
-                        Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
-                    }
-                    else {
-                        Write-Warning "DryRun: Would update row from table [$table]. Query: $($queryUpdate)"
-                    }
-
-                    $outputContext.auditlogs.Add([PSCustomObject]@{
-                            Message = $auditMessage
-                            IsError = $false
-                        })
-
-                    break
-                }
-            }
-        }
-        catch {
-            $ex = $PSItem
-            $auditErrorMessage = $ex.Exception.Message
-            Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
             $outputContext.auditlogs.Add([PSCustomObject]@{
-                    Message = "Failed to insert data into table [$table] for attribute [$attributeName] with value [$attributeValue]: $($auditErrorMessage)"
-                    IsError = $true
+                    Message = $auditMessage
+                    IsError = $false
                 })
+
+            break
         }
     }
 }
 catch {
     $ex = $PSItem
     $auditErrorMessage = $ex.Exception.Message
-    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
-
+    Write-Warning "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
+    Write-Warning "QuerySelect: $querySelect"
+    Write-Warning "QueryUpdate: $queryUpdate"
     $outputContext.auditlogs.Add([PSCustomObject]@{
-            Message = "Generic error: $($auditErrorMessage)"
+            Message = "Failed to update data in table [$table] : $($auditErrorMessage)"
             IsError = $true
         })
 }
