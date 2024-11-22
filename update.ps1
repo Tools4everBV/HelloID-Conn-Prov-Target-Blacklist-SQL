@@ -1,5 +1,5 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Blacklist-Create-Update-SQL
+# HelloID-Conn-Prov-Target-Blacklist-SQL-Update
 # Use data from dependent system
 # Script can be used as a create and update script
 #####################################################
