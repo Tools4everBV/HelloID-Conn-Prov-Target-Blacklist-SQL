@@ -45,10 +45,11 @@ The HelloID connector consists of the template scripts shown in the following ta
 
 | Action                            | Action(s) Performed                             | Comment                                                                                                                                                                   |
 | --------------------------------- | ----------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| create.ps1 | Write account data to SQL DB table             | Uses account data from another system. Can also be used as an update script |
-| delete.ps1 | Write whenDeleted date to SQL DB table             | Uses account data from another system. Can also be used as an update script |
+| create.ps1 | Write account data to SQL DB table             | Uses account data from another system |
+| create.ps1 | Write account data to SQL DB table             | Uses account data from another system |
+| delete.ps1 | Write whenDeleted date to SQL DB table         | Uses account data from another system. Can also be used as an update script |
 | configuration.json | Default configuration file             ||
-| fieldMapping.json | Default field mapping file             ||
+| fieldMapping.json | Default field mapping file              ||
 | checkOnExternalSystemsAd.ps1        | Check mapped fields against the SQL database              | This is configured in the built-in Active Directory connector |
 | createTableBlacklist.sql        | Script to create the SQL table in the SQL database              |Run this within the SQL Management Studio|
 | /GenerateUniqueData/example.create.ps1     | Generate unique value and write to SQL DB table | Checks the current data in SQL and generates a value that doesn't exist yet. Use this when generating a random number and use this as input for your AD or Azure AD system. Please be aware this is an example build for the legacy PowerShell connector.  |
@@ -82,7 +83,9 @@ The following settings can and should be set in the AD Uniquess script
 
 - This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and requires additional configuration.
 - Make sure the attribute names in the mapping correspond with the attribute names in the primary source system.
-- If you need to update the values as well, you can use the account creation script as an update script without modification. Just remember to update the mapping, too.
+- If updating the values is not required, the account update script can be omitted. Ensure that the mapping is updated accordingly.
+- The mapping field employeeId should only be configured to the create & update event.
+- The mapping field whenDeleted should only be mapped to the delete event.
 
 ## Getting help
 > [!TIP]
