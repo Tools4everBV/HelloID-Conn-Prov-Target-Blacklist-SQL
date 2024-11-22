@@ -1,7 +1,6 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-SQL-Delete
 # Use data from dependent system
-# Only set whenDeleted on all records where column employeeId = externalId
 #####################################################
 
 function Invoke-SQLQuery {

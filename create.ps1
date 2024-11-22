@@ -1,7 +1,6 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-SQL-Create
 # Use data from dependent system
-# Script can be used as a create and update script
 #####################################################
 
 function Invoke-SQLQuery {
