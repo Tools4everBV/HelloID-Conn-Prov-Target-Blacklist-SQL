@@ -1,9 +1,8 @@
 #####################################################
 # HelloID-Conn-Prov-Target-Blacklist-Delete-SQL
 # Use data from dependent system
-#####################################################
-
 # Only set whenDeleted on all records where column employeeId = externalId
+#####################################################
 
 function Invoke-SQLQuery {
     param(
@@ -76,11 +75,7 @@ function Invoke-SQLQuery {
 
 try {
     $table = $actionContext.configuration.table
-
-    $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
-    $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
-    $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
-    $querySelect = "SELECT $($querySelectProperties) FROM $table WHERE [employeeId] = '$($actionContext.References.Account)' AND [WhenDeleted] IS NULL"
+    $querySelect = "SELECT * FROM $table WHERE [employeeId] = '$($actionContext.References.Account)' AND [WhenDeleted] IS NULL"
 
     Write-Information "Querying data from table [$table]. Query: $($querySelect)"
 
@@ -117,7 +112,7 @@ try {
             break
         }
         "UpdateAccount" {
-            $queryUpdateSet = "[whenDeleted]='$($account.whenDeleted)'"
+            $queryUpdateSet = "[whenDeleted]='$($actionContext.data.whenDeleted)'"
             $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [employeeId] = '$($actionContext.References.Account)' AND [WhenDeleted] IS NULL"
             $auditMessage = "Successfully set [whenDeleted] for rows with employeeId [$($actionContext.References.Account)]"
 
