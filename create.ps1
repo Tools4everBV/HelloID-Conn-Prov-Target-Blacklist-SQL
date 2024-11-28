@@ -197,7 +197,7 @@ try {
         }
     }
     # To prevent the audit message 'Account create successful' from being displayed in the create script. This audit message will be ignored in the update script, because 'Data' and 'PreviousData' will have the same values.
-    if (([string]::IsNullOrEmpty($outputContext.auditlogs)) -and $noChanges) {
+    if (([string]::IsNullOrEmpty($outputContext.auditlogs.Message)) -and $noChanges) {
         $outputContext.auditlogs.Add([PSCustomObject]@{
                 Message = "No updates required in table [$table] for attributes [$($attributeNames -join ', ')]"
                 IsError = $false
