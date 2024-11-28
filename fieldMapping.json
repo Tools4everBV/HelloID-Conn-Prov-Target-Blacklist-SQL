@@ -2,22 +2,6 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "whenDeleted",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Delete"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n    //let dateText = date.toDateString();\\n    //return dateText;\\n}\\n\\ngetDate();\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
       "Name": "SamAccountName",
       "Description": "",
       "Type": "Text",
@@ -53,17 +37,44 @@
     },
     {
       "Name": "employeeId",
-      "Description": "",
+      "Description": "[Required]",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create"
+            "Create",
+            "Update"
           ],
           "MappingMode": "Field",
           "Value": "\"Person.ExternalId\"",
           "UsedInNotifications": false,
           "StoreInAccountData": true
+        }
+      ]
+    },
+    {
+      "Name": "whenDeleted",
+      "Description": "[Required]",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n}\\n\\ngetDate();\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        },
+        {
+          "MapForActions": [
+            "Create",
+            "Update"
+          ],
+          "MappingMode": "Fixed",
+          "Value": "\"NULL\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
         }
       ]
     }

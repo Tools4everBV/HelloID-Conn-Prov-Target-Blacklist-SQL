@@ -27,7 +27,7 @@ $attributeNames = @('SamAccountName', 'UserPrincipalName')
 $syncIterations = $true
 
 # Select which attributes should iterate when syncIterations = $true; this usually mirrors the AD field mapping uniqueness configuration
-$syncIterationsAttributeNames = @('SamAccountName', 'UserPrincipalName','commonName', 'mail',"proxyAddresses")
+$syncIterationsAttributeNames = @('SamAccountName', 'UserPrincipalName', 'commonName', 'mail', "proxyAddresses")
 
 # Exclude self from query
 $excludeSelf = $true
@@ -130,7 +130,8 @@ try {
                 else {
                     Write-Information "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
                 }
-            } catch {
+            }
+            catch {
                 $ex = $PSItem
                 # Set Verbose error message
                 $verboseErrorMessage = $ex.Exception.Message
@@ -170,7 +171,7 @@ finally {
 
     # When syncIterations is set to true, set NonUniqueFields to all configured fields
     if (($NonUniqueFields | Measure-Object).Count -ge 1 -and $syncIterations -eq $true) {
-        $NonUniqueFields = $attributeNames + $syncIterationsAttributeNames |Sort-Object -Unique
+        $NonUniqueFields = $attributeNames + $syncIterationsAttributeNames | Sort-Object -Unique
     }
 
     # Send results

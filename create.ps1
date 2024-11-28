@@ -105,9 +105,12 @@ try {
 
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
-
-                $action = "UpdateAccount"
-
+                if ($correlatedAccount.employeeId -ne $account.employeeId -or (-not([string]::IsNullOrEmpty($correlatedAccount.whenDeleted)))) {
+                    $action = "UpdateAccount"
+                }
+                else {
+                    $action = "NoChanges" 
+                }
             }
             elseif ($selectRowCount -eq 0) {
                 $action = "CreateAccount"
@@ -122,7 +125,7 @@ try {
 
                     # Enclose Property Names with brackets [] & Enclose Property Values with single quotes ''
                     $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-                    $queryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
+                    $queryInsertValues = $(($account.PSObject.Properties.Value | ForEach-Object { if ($_ -ne 'null') { "'$_'" } else { 'null' } }) -join ',')
                     $queryInsert = "INSERT INTO $table ($($queryInsertProperties)) VALUES ($($queryInsertValues))"
 
                     $queryInsertSplatParams = @{
@@ -149,36 +152,36 @@ try {
                     break
                 }
                 "UpdateAccount" {
-                    if ($correlatedAccount.employeeId -ne $account.employeeId -or $correlatedAccount.whenDeleted -ne '') {
-                        $queryUpdateSet = "SET [employeeId]='$($account.employeeId)', [whenDeleted]=null"
-                        $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue'"
+                    $queryUpdateSet = "SET [employeeId]='$($account.employeeId)', [whenDeleted]=null"
+                    $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
-                        $queryUpdateSplatParams = @{
-                            ConnectionString = $actionContext.configuration.connectionString
-                            Username         = $actionContext.configuration.username
-                            Password         = $actionContext.configuration.password
-                            SqlQuery         = $queryUpdate
-                            ErrorAction      = "Stop"
-                        }
+                    $queryUpdateSplatParams = @{
+                        ConnectionString = $actionContext.configuration.connectionString
+                        Username         = $actionContext.configuration.username
+                        Password         = $actionContext.configuration.password
+                        SqlQuery         = $queryUpdate
+                        ErrorAction      = "Stop"
+                    }
 
-                        $queryUpdateResult = [System.Collections.ArrayList]::new()
-                        if (-not($actioncontext.dryRun -eq $true)) {
-                            Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
-                            Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
-                        }
-                        else {
-                            Write-Warning "DryRun: Would update updated row in table [$table] for attribute [$attributeName] and value [$attributeValue]. Query: $($queryUpdate)"
-                        }
-                        $outputContext.AccountReference = $account.employeeId
-
-                        $outputContext.auditlogs.Add([PSCustomObject]@{
-                                Message = "Successfully updated row in table [$table] for attribute [$attributeName] and value [$attributeValue]"
-                                IsError = $false
-                            })
+                    $queryUpdateResult = [System.Collections.ArrayList]::new()
+                    if (-not($actioncontext.dryRun -eq $true)) {
+                        Write-Information "Updating row from table [$table]. Query: $($queryUpdate)"
+                        Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
                     }
                     else {
-                        Write-Information "Nothing to update for person"
+                        Write-Warning "DryRun: Would update updated row in table [$table] for attribute [$attributeName] and value [$attributeValue]. Query: $($queryUpdate)"
                     }
+                    $outputContext.AccountReference = $account.employeeId
+                    $outputContext.auditlogs.Add([PSCustomObject]@{
+                            Message = "Successfully updated row in table [$table] for attribute [$attributeName] and value [$attributeValue]"
+                            IsError = $false
+                        })
+                    break
+                }
+                "NoChanges" {
+                    $outputContext.AccountReference = $account.employeeId
+                    $noChanges = $true
+                    Write-Information "Value in table [$table] for attribute [$attributeName] and value [$attributeValue] already exists, action skipped"
                     break
                 }
             }
@@ -193,6 +196,13 @@ try {
                 })
         }
     }
+    # To prevent the audit message 'Account create successful' from being displayed in the create script. This audit message will be ignored in the update script, because 'Data' and 'PreviousData' will have the same values.
+    if (([string]::IsNullOrEmpty($outputContext.auditlogs)) -and $noChanges) {
+        $outputContext.auditlogs.Add([PSCustomObject]@{
+                Message = "No updates required in table [$table] for attributes [$($attributeNames -join ', ')]"
+                IsError = $false
+            })
+    }
 }
 catch {
     $ex = $PSItem
@@ -200,9 +210,9 @@ catch {
     Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($auditErrorMessage)"
 
     $outputContext.auditlogs.Add([PSCustomObject]@{
-        Message = "Generic error: $($auditErrorMessage)"
-        IsError = $true
-    })
+            Message = "Generic error: $($auditErrorMessage)"
+            IsError = $true
+        })
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

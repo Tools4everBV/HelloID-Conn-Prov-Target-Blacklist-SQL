@@ -11,7 +11,7 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
-  <img src="https://cdn-icons-png.flaticon.com/128/4443/4443857.png">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/blob/main/Logo.png?raw=true">
 </p>
 
 ## Table of Contents
@@ -22,7 +22,8 @@ Repository for HelloID Provisioning Target Connector to SQL Blacklist
   - [Requirements](#requirements)
   - [Repository contents](#repository-contents)
   - [Connection settings](#connection-settings)
-  - [Settings in AD Uniqueness script](#settings-in-ad-uniqueness-script)
+  - [Correlation configuration](#correlation-configuration)
+  - [Settings in AD uniqueness script](#settings-in-ad-uniqueness-script)
   - [Remarks](#remarks)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
@@ -69,8 +70,8 @@ The following settings are required to connect to SQL DB.
 
 The correlation configuration is not used or required in this connector
 
-## Settings in AD Uniqueness script
-The following settings can and should be set in the AD Uniquess script
+## Settings in AD uniqueness script
+The following settings can and should be set in the AD uniqueness script
 
 | Setting           | Description                                                            | Default value |
 | ----------------- | ---------------------------------------------------------------------- | ---------------------------------------- |
@@ -81,7 +82,7 @@ The following settings can and should be set in the AD Uniquess script
 
 ## Remarks
 
-- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't desgined for this and requires additional configuration.
+- This connector is designed to connect to an MS-SQL DB. Optionally you can also configure this to use another DB, such as SQLite or Oracle. However, the connector currently isn't designed for this and requires additional configuration.
 - Make sure the attribute names in the mapping correspond with the attribute names in the primary source system.
 - If updating the values is not required, the account update script can be omitted. Ensure that the mapping is updated accordingly.
 - The mapping field employeeId should only be configured to the create & update event.
