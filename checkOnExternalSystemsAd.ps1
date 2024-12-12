@@ -1,0 +1,185 @@
+#########################################################################
+# HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-AD-SQL
+#########################################################################
+
+# Initialize default values
+$success = $false # Set to false at start, at the end, only when no error occurs it is set to true
+$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
+$NonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
+
+$eRef = $entitlementContext | ConvertFrom-Json
+$c = $eRef.configuration
+$a = $account | ConvertFrom-Json
+$p = $person | ConvertFrom-Json
+
+# Used to connect to SQL server.
+$connectionString = $c.connectionString
+$username = $c.username
+$password = $c.password
+$table = $c.table
+
+#region Change mapping here
+
+# select which attributes should be checked
+$attributeNames = @('SamAccountName', 'UserPrincipalName')
+
+# Raise iteration of all configured fields when one is not unique
+$syncIterations = $true
+
+# Select which attributes should iterate when syncIterations = $true; this usually mirrors the AD field mapping uniqueness configuration
+$syncIterationsAttributeNames = @('SamAccountName', 'UserPrincipalName', 'commonName', 'mail', "proxyAddresses")
+
+# Exclude self from query
+$excludeSelf = $true
+
+#endregion Change mapping here
+
+#region functions
+function Invoke-SQLQuery {
+    param(
+        [parameter(Mandatory = $true)]
+        $ConnectionString,
+
+        [parameter(Mandatory = $false)]
+        $Username,
+
+        [parameter(Mandatory = $false)]
+        $Password,
+
+        [parameter(Mandatory = $true)]
+        $SqlQuery,
+
+        [parameter(Mandatory = $true)]
+        [ref]$Data
+    )
+    try {
+        $Data.value = $null
+
+        # Connect to the SQL server
+        $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
+        $SqlConnection.ConnectionString = $ConnectionString
+        if (-not[String]::IsNullOrEmpty($sqlCredential)) {
+            $SqlConnection.Credential = $sqlCredential
+        }
+        $SqlConnection.Open()
+        Write-Information "Successfully connected to SQL database"
+
+        # Set the query
+        $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
+        $SqlCmd.Connection = $SqlConnection
+        $SqlCmd.CommandText = $SqlQuery
+
+        # Set the data adapter
+        $SqlAdapter = [System.Data.SqlClient.SqlDataAdapter]::new()
+        $SqlAdapter.SelectCommand = $SqlCmd
+
+        # Set the output with returned data
+        $DataSet = [System.Data.DataSet]::new()
+        $null = $SqlAdapter.Fill($DataSet)
+
+        # Set the output with returned data
+        $Data.value = $DataSet.Tables[0] | Select-Object -Property * -ExcludeProperty RowError, RowState, Table, ItemArray, HasErrors
+    }
+    catch {
+        $Data.Value = $null
+        throw $_
+    }
+    finally {
+        if ($SqlConnection.State -eq "Open") {
+            $SqlConnection.close()
+            Write-Information "Successfully disconnected from SQL database"
+        }
+    }
+}
+#endregion functions
+
+try {
+    $valuesToCheck = [PSCustomObject]@{}
+    foreach ($attributeName in $attributeNames) {
+        if ($a.PsObject.Properties.Name -contains $attributeName) {
+            $valuesToCheck | Add-Member -MemberType NoteProperty -Name $attributeName -Value $a.$attributeName
+        }
+    }
+    if (-not[String]::IsNullOrEmpty($valuesToCheck)) {
+
+        # Query current data in database
+        foreach ($attribute in $valuesToCheck.PSObject.Properties) {
+            try {
+                $querySelect = "SELECT * FROM [$table] WHERE [attributeName] = '$($attribute.Name)' AND  [attributeValue] = '$($attribute.Value)'"
+                if ($excludeSelf) {
+                    $querySelect = "$querySelect AND NOT [EmployeeId] = '$($p.ExternalId)'"
+                }
+
+                $querySelectSplatParams = @{
+                    ConnectionString = $connectionString
+                    Username         = $username
+                    Password         = $password
+                    SqlQuery         = $querySelect
+                    ErrorAction      = "Stop"
+                }
+
+                $querySelectResult = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
+                $selectRowCount = ($querySelectResult | measure-object).count
+                Write-Information "Successfully queried data from table [$table] for attribute [$($attribute.Name)]. Query: $($querySelect). Returned rows: $selectRowCount)"
+
+                if ($selectRowCount -ne 0) {
+                    Write-Warning "$($attribute.Name) value [$($attribute.Value)] is NOT unique in blacklist table [$table]"
+                    [void]$NonUniqueFields.Add($attribute.Name)
+                }
+                else {
+                    Write-Information "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
+                }
+            }
+            catch {
+                $ex = $PSItem
+                # Set Verbose error message
+                $verboseErrorMessage = $ex.Exception.Message
+                # Set Audit error message
+                $auditErrorMessage = $ex.Exception.Message
+
+                Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+                $auditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Error checking mapped values against database data. Error Message: $($auditErrorMessage)"
+                        IsError = $True
+                    })
+
+                # Use throw, as auditLogs are not available in check on external system
+                throw "Error checking mapped values against database data. Error Message: $($auditErrorMessage)"
+            }
+        }
+    }
+}
+catch {
+    $ex = $PSItem
+    # Set Verbose error message
+    $verboseErrorMessage = $ex.Exception.Message
+
+    # Set Audit error message
+    $auditErrorMessage = $ex.Exception.Message
+
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    # Use throw, as auditLogs are not available in check on external system
+    throw "Error performing uniqueness check on external systems. Error Message: $($auditErrorMessage)"
+}
+finally {
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-not($auditLogs.IsError -contains $true)) {
+        $success = $true
+    }
+
+    # When syncIterations is set to true, set NonUniqueFields to all configured fields
+    if (($NonUniqueFields | Measure-Object).Count -ge 1 -and $syncIterations -eq $true) {
+        $NonUniqueFields = $attributeNames + $syncIterationsAttributeNames | Sort-Object -Unique
+    }
+
+    # Send results
+    $result = [PSCustomObject]@{
+        Success         = $success
+
+        # Add field name as string when field is not unique
+        NonUniqueFields = $NonUniqueFields
+    }
+    Write-Output ($result | ConvertTo-Json -Depth 10)
+}

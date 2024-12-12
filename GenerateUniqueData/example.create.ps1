@@ -1,21 +1,13 @@
 #####################################################
-# HelloID-Conn-Prov-Target-Blacklist-Create-SQL
+# HelloID-Conn-Prov-Target-Blacklist-Create-SQL-Unique
 #
-# Version: 1.0.0
 #####################################################
 # Initialize default values
+
 $c = $configuration | ConvertFrom-Json
 $p = $person | ConvertFrom-Json
 $success = $false # Set to false at start, at the end, only when no error occurs it is set to true
 $auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-
-# Set debug logging
-switch ($($c.isDebug)) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
 
 # Used to connect to SQL server.
 $connectionString = $c.connectionString
@@ -24,18 +16,24 @@ $password = $c.password
 $table = $c.table
 
 #region Change mapping here
+# Define prefix of generated unique value
+$prefix = $p.Name.FamilyName.substring(0, 1)
+$suffix = ""
+# Define range of allowed numbers
+$inputRange = 0000..9999
+# Define amount of characters the string should always be. E.g. 4 if the string should always be 4 chars long, even if the generated number is 3, the string will be "0003"
+$amountOfChars = 4 # If left empty, the generated number will not be prefixed by leading zeros
+
 $account = [PSCustomObject]@{
-    "SamAccountName"    = $p.Accounts.MicrosoftActiveDirectory.samaccountname # Property Name has to match the DB column name
-    "UserPrincipalName" = $p.Accounts.MicrosoftActiveDirectory.userPrincipalName # Property Name has to match the DB column name
-    "Mail"              = $p.Accounts.MicrosoftActiveDirectory.mail # Property Name has to match the DB column name
+    "SamAccountName" = "Unknown" # Generated further down in script
 }
 #endregion Change mapping here
 
 # Define aRef
-$aRef = $account.UserPrincipalName # Use most unique propertie, e.g. SamAccountName or UserPrincipalName
+$aRef = $account.SamAccountName # Use most unique propertie, e.g. SamAccountName or UserPrincipalName
 
 # Define account properties to store in account data
-$storeAccountFields = @("SamAccountName", "UserPrincipalName", "Mail")
+$storeAccountFields = @("SamAccountName")
 
 #region functions
 function Invoke-SQLQuery {
@@ -77,7 +75,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -102,13 +100,95 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Verbose "Successfully disconnected from SQL database"
+            Write-Information "Successfully disconnected from SQL database"
         }
     }
 }
 #endregion functions
 
 try {
+    # Query current data in database
+    try {
+        # Enclose Property Names with brackets []
+        $querySelectProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
+        $querySelect = "
+        SELECT
+            $($querySelectProperties)
+        FROM
+            $table"
+
+        Write-Information "Querying data from table [$($table)]. Query: $($querySelect)"
+
+        $querySelectSplatParams = @{
+            ConnectionString = $connectionString
+            Username         = $username
+            Password         = $password
+            SqlQuery         = $querySelect
+            ErrorAction      = "Stop"
+        }
+        $querySelectResult = [System.Collections.ArrayList]::new()
+        Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
+
+        Write-Information "Successfully queried data from table [$($table)]. Query: $($querySelect). Returned rows: $(($querySelectResult | Measure-Object).Count)"
+    }
+    catch {
+        $ex = $PSItem
+        # Set Verbose error message
+        $verboseErrorMessage = $ex.Exception.Message
+        # Set Audit error message
+        $auditErrorMessage = $ex.Exception.Message
+
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        $auditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Error querying data from table [$($table)]. Query: $($querySelect). Error Message: $($auditErrorMessage)"
+                IsError = $True
+            })
+
+        # Skip further actions, as this is a critical error
+        continue
+    }
+
+    # Get current values and generate random value that does not exist yet
+    try {
+        # Format input range to specified amount of chars, prefix and/or suffix
+        $inputRange = $inputRange | ForEach-Object { "$prefix{0:d$amountOfChars}$suffix" -f $_ }
+
+        Write-Information "Generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist"
+
+        $currentValues = $querySelectResult."$($column)" | Sort-Object
+        $excludeRange = $currentValues
+
+        $regexExcludeRange = '(?i)^(' + (($excludeRange | Foreach-Object { [regex]::escape($_) }) -join “|”) + ')$'
+        $randomRange = $inputRange -notmatch $regexExcludeRange
+        if ($null -eq $randomRange) {
+            throw "Error generating random value: No more values allowed. Please adjust the range. Current range: $($inputRange | Select-Object -First 1) to $($inputRange | Select-Object -Last 1)"
+        }
+        $uniqueValue = Get-Random -InputObject $randomRange
+
+        # Set SamAccountName of Account object with generated unique value
+        $account.SamAccountName = $uniqueValue
+
+        Write-Information "Successfully generated random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist: [$($uniqueValue)]"
+    }
+    catch {
+        $ex = $PSItem
+        # Set Verbose error message
+        $verboseErrorMessage = $ex.Exception.Message
+        # Set Audit error message
+        $auditErrorMessage = $ex.Exception.Message
+
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        $auditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Error generating random value between [$($inputRange[0])] and [$($inputRange[-1])] that doesn't exist in blacklist. Error Message: $auditErrorMessage"
+                IsError = $True
+            })
+
+        # Skip further actions, as this is a critical error
+        continue
+    }
+
     # Update blacklist database
     try {
         # Enclose Property Names with brackets []
@@ -121,9 +201,9 @@ try {
             ($($queryInsertProperties))
         VALUES
             ($($queryInsertValues))"
-            
+
         if (-not($dryRun -eq $true)) {
-            Write-Verbose "Inserting data into table [$($table)]. Query: $($queryInsert)"
+            Write-Information "Inserting data into table [$($table)]. Query: $($queryInsert)"
 
             $queryInsertSplatParams = @{
                 ConnectionString = $connectionString
@@ -153,7 +233,7 @@ try {
         # Set Audit error message
         $auditErrorMessage = $ex.Exception.Message
 
-        Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+        Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
         $auditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
                 Message = "Error inserting data into table [$($table)]. Query: $($queryInsert). Error Message: $($auditErrorMessage)"
@@ -173,7 +253,7 @@ catch {
     # Set Audit error message
     $auditErrorMessage = $ex.Exception.Message
 
-    Write-Verbose "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
+    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
     $auditLogs.Add([PSCustomObject]@{
             # Action  = "" # Optional
             Message = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
