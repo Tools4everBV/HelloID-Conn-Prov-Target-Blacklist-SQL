@@ -43,5 +43,17 @@
       "description": "Optional: The username of the SQL user to use in the connection string",
       "required": false
     }
+  },
+  {
+    "key": "retentionPeriod",
+    "type": "input",
+    "defaultValue": "365",
+    "templateOptions": {
+      "label": "Retention Period (days)",
+      "type": "number",
+      "placeholder": "365",
+      "description": "The number of days a deleted value should remain blocked. After this period, the value can be reused. Use 999999 for no retention limit.",
+      "required": true
+    }
   }
 ]
