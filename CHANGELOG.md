@@ -45,3 +45,39 @@ This is a major release of HelloID-Conn-Prov-Target-Blacklist-SQL with significa
 
 - `whenDeleted` field from fieldMapping.json (managed internally by scripts)
 - Unnecessary Write-Information statements for action intentions
+
+## [1.1.0] - 2024-12-12
+
+### Added
+
+- PowerShell V2 connector support with improved structure
+- Enhanced field mapping configuration
+- Improved error handling and logging
+
+### Changed
+
+- Migrated from legacy PowerShell V1 to PowerShell V2 connector format
+- Updated connector structure to follow V2 standards
+- Improved code organization and maintainability
+
+## [1.0.0] - 2024-05-17
+
+### Added
+
+- Initial release of HelloID-Conn-Prov-Target-Blacklist-SQL
+- Basic create, update, and delete lifecycle actions
+- SQL database integration for blacklist management
+- Support for tracking employeeId, attributeName, and attributeValue
+- Configuration for connection string and table settings
+- Field mapping for SamAccountName, UserPrincipalName, and employeeId
+- Basic uniqueness checking script for Active Directory integration
+- Example script for generating unique data
+- SQL table creation script
+
+### Changed
+
+- N/A (initial release)
+
+### Fixed
+
+- N/A (initial release)
