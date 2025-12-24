@@ -2,48 +2,13 @@
   "Version": "v1",
   "MappingFields": [
     {
-      "Name": "SamAccountName",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getSamAccountName() {\\r\\n    let samAccountName = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.sAMAccountName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.sAMAccountName) {\\r\\n        samAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    return samAccountName;\\r\\n}\\r\\n\\r\\ngetSamAccountName()\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
-      "Name": "UserPrincipalName",
-      "Description": "",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create",
-            "Update"
-          ],
-          "MappingMode": "Complex",
-          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n\\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined' && Person.Accounts.MicrosoftActiveDirectory.userPrincipalName) {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\ngetUserPrincipalName()\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
       "Name": "employeeId",
       "Description": "[Required]",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
-            "Create",
-            "Update"
+            "Create"
           ],
           "MappingMode": "Field",
           "Value": "\"Person.ExternalId\"",
@@ -53,28 +18,56 @@
       ]
     },
     {
-      "Name": "whenDeleted",
-      "Description": "[Required]",
+      "Name": "Mail",
+      "Description": "[Optional]\nIf provided, this field should always be selected for all actions: Create, Update and Delete.",
       "Type": "Text",
       "MappingActions": [
         {
           "MapForActions": [
+            "Create",
+            "Update",
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getDate() {\\n    const date = new Date();\\n    return date;\\n}\\n\\ngetDate();\"",
+          "Value": "\"function getMail() {\\r\\n    let mail = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined') {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    }\\r\\n    \\r\\n    return mail;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getMail();\\r\\n}\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
-        },
+          "StoreInAccountData": true
+        }
+      ]
+    },
+    {
+      "Name": "SamAccountName",
+      "Description": "[Optional]\nIf provided, this field should always be selected for all actions: Create, Update and Delete.",
+      "Type": "Text",
+      "MappingActions": [
         {
           "MapForActions": [
             "Create",
-            "Update"
+            "Update",
+            "Delete"
           ],
-          "MappingMode": "Fixed",
-          "Value": "\"NULL\"",
+          "MappingMode": "Complex",
+          "Value": "\"function getSAMAccountName() {\\r\\n    let sAMAccountName = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.sAMAccountName !== 'undefined') {\\r\\n        sAMAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    \\r\\n    return sAMAccountName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getSAMAccountName();\\r\\n}\"",
           "UsedInNotifications": false,
-          "StoreInAccountData": false
+          "StoreInAccountData": true
+        }
+      ]
+    },
+    {
+      "Name": "UserPrincipalName",
+      "Description": "[Optional]\nIf provided, this field should always be selected for all actions: Create, Update and Delete.",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create",
+            "Update",
+            "Delete"
+          ],
+          "MappingMode": "Complex",
+          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined') {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    \\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getUserPrincipalName();\\r\\n}\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": true
         }
       ]
     }
