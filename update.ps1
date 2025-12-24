@@ -86,10 +86,6 @@ try {
         throw "The account reference could not be found"
     }
 
-    # Initialize output context objects to accumulate data for each attribute
-    $outputContext.Data = @{}
-    $outputContext.PreviousData = @{}
-
     foreach ($attributeName in $attributeNames) {
         # Check if attribute is in table
         $actionMessage = "querying row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
@@ -195,6 +191,10 @@ try {
                 $queryInsertResult = [System.Collections.ArrayList]::new()
                 if (-not($actioncontext.dryRun -eq $true)) {
                     Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
+
+                    # Set Data to the newly created object, PreviousData is null since it didn't exist
+                    $outputContext.PreviousData[$attributeName] = $null
+                    $outputContext.Data[$attributeName] = $insertObject
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             # Action  = "" # Optional
