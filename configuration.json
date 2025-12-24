@@ -50,7 +50,6 @@
     "defaultValue": "365",
     "templateOptions": {
       "label": "Retention Period (days)",
-      "type": "number",
       "placeholder": "365",
       "description": "The number of days a deleted value should remain blocked. After this period, the value can be reused. Use 999999 for no retention limit.",
       "required": true

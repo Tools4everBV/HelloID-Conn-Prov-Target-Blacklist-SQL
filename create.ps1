@@ -74,8 +74,9 @@ function Invoke-SQLQuery {
 
 try {
     $table = $actionContext.configuration.table
+    $retentionPeriod = $actionContext.configuration.retentionPeriod
 
-    $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted).PSObject.Properties.Name
+    $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty employeeId, whenDeleted, whenCreated, whenUpdated).PSObject.Properties.Name
 
     foreach ($attributeName in $attributeNames) {
         try {
@@ -105,11 +106,36 @@ try {
 
             if ($selectRowCount -eq 1) {
                 $correlatedAccount = $querySelectResult
-                if ($correlatedAccount.employeeId -ne $account.employeeId -or (-not([string]::IsNullOrEmpty($correlatedAccount.whenDeleted)))) {
-                    $action = "UpdateAccount"
+                
+                # Check if value belongs to someone else
+                if ($correlatedAccount.employeeId -ne $account.employeeId) {
+                    # Check retention period if value is deleted
+                    if (-NOT [string]::IsNullOrEmpty($correlatedAccount.whenDeleted)) {
+                        $whenDeletedDate = [datetime]($correlatedAccount.whenDeleted)
+                        $daysDiff = (New-TimeSpan -Start $whenDeletedDate -End (Get-Date)).Days
+                        
+                        if ($daysDiff -lt $retentionPeriod) {
+                            $action = "OtherEmployeeId"
+                        }
+                        else {
+                            # Retention period expired, can reuse
+                            $action = "UpdateAccount"
+                        }
+                    }
+                    else {
+                        # Value belongs to someone else and not deleted
+                        $action = "OtherEmployeeId"
+                    }
                 }
                 else {
-                    $action = "NoChanges" 
+                    # Value belongs to current employee
+                    if (-not([string]::IsNullOrEmpty($correlatedAccount.whenDeleted))) {
+                        # Clear whenDeleted to reactivate
+                        $action = "UpdateAccount"
+                    }
+                    else {
+                        $action = "NoChanges" 
+                    }
                 }
             }
             elseif ($selectRowCount -eq 0) {
@@ -122,10 +148,14 @@ try {
             # Update blacklist database
             switch ($action) {
                 "CreateAccount" {
+                    # Add timestamps
+                    $account | Add-Member -NotePropertyName 'whenCreated' -NotePropertyValue (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff") -Force
+                    $account | Add-Member -NotePropertyName 'whenUpdated' -NotePropertyValue $null -Force
+                    $account | Add-Member -NotePropertyName 'whenDeleted' -NotePropertyValue $null -Force
 
                     # Enclose Property Names with brackets [] & Enclose Property Values with single quotes ''
-                    $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-                    $queryInsertValues = $(($account.PSObject.Properties.Value | ForEach-Object { if ($_ -ne 'null') { "'$_'" } else { 'null' } }) -join ',')
+                    $queryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[" + "]"))
+                    $queryInsertValues = $(($account.PSObject.Properties.Value | ForEach-Object { if ($_ -ne 'null' -and $null -ne $_) { "'$_'" } else { 'null' } }) -join ',')
                     $queryInsert = "INSERT INTO $table ($($queryInsertProperties)) VALUES ($($queryInsertValues))"
 
                     $queryInsertSplatParams = @{
@@ -152,7 +182,7 @@ try {
                     break
                 }
                 "UpdateAccount" {
-                    $queryUpdateSet = "SET [employeeId]='$($account.employeeId)', [whenDeleted]=null"
+                    $queryUpdateSet = "SET [employeeId]='$($account.employeeId)', [whenDeleted]=null, [whenUpdated]=GETDATE()"
                     $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
                     $queryUpdateSplatParams = @{
@@ -182,6 +212,11 @@ try {
                     $outputContext.AccountReference = $account.employeeId
                     $noChanges = $true
                     Write-Information "Value in table [$table] for attribute [$attributeName] and value [$attributeValue] already exists, action skipped"
+                    break
+                }
+                "OtherEmployeeId" {
+                    # Throw terminal error
+                    throw "A row was found where [$attributeName] = [$attributeValue]. However the EmployeeID [$($correlatedAccount.employeeId)] doesn't match the current person (expected: [$($account.employeeId)]). Additionally, [whenDeleted] = [$($correlatedAccount.whenDeleted)] is still within the allowed threshold [$retentionPeriod days]. This should not be possible. Please check the database for inconsistencies."
                     break
                 }
             }
