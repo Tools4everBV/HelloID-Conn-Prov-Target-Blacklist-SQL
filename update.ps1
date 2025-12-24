@@ -2,7 +2,7 @@
 # HelloID-Conn-Prov-Target-Blacklist-SQL-Update
 # Use data from dependent system
 #####################################################
-$actionContext.DryRun = $false
+
 $table = $actionContext.configuration.table
 $retentionPeriod = $actionContext.configuration.retentionPeriod
 
