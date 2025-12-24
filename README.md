@@ -1,10 +1,5 @@
 # HelloID-Conn-Prov-Target-Blacklist-SQL
 
-<a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/network/members"><img src="https://img.shields.io/github/forks/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL" alt="Forks Badge"/></a>
-<a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/pulls"><img src="https://img.shields.io/github/issues-pr/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL" alt="Pull Requests Badge"/></a>
-<parameter name="issues"><img src="https://img.shields.io/github/issues/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL" alt="Issues Badge"/></a>
-<a href="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL/graphs/contributors"><img alt="GitHub contributors" src="https://img.shields.io/github/contributors/Tools4everBV/HelloID-Conn-Prov-Target-Blacklist-SQL?color=2b9348"></a>
-
 > [!IMPORTANT]
 > This repository contains the connector and configuration code only. The implementer is responsible to acquire the connection details such as username, password, certificate, etc. You might even need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
