@@ -203,11 +203,11 @@ try {
             }
 
             "Update" {
-                # Update row - clear whenDeleted
-                $actionMessage = "clearing [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.Data.employeeId)]"
+                # Update row - clear whenDeleted and update employeeId (either for current employee or reusing expired row)
+                $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
-                $queryUpdateSet = "SET [whenDeleted]=null, [whenUpdated]=GETDATE()"
-                $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName' AND [employeeId] = '$($account.employeeId)'"
+                $queryUpdateSet = "SET [employeeId]='$($actionContext.Data.employeeId)', [whenDeleted]=null, [whenUpdated]=GETDATE()"
+                $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
                 $queryUpdateSplatParams = @{
                     ConnectionString = $actionContext.configuration.connectionString
@@ -223,12 +223,12 @@ try {
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             # Action  = "" # Optional
-                            Message = "Cleared [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.Data.employeeId)]."
+                            Message = "Updated row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Set [employeeId] to [$($actionContext.Data.employeeId)] and cleared [whenDeleted]."
                             IsError = $false
                         })
                 }
                 else {
-                    Write-Warning "DryRun: Would clear [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.Data.employeeId)]."
+                    Write-Warning "DryRun: Would update row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Would set [employeeId] to [$($actionContext.Data.employeeId)] and clear [whenDeleted]."
                 }
 
                 break

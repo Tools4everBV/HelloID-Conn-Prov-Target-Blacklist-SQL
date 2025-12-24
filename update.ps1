@@ -2,7 +2,7 @@
 # HelloID-Conn-Prov-Target-Blacklist-SQL-Update
 # Use data from dependent system
 #####################################################
-
+$actionContext.DryRun = $false
 $table = $actionContext.configuration.table
 $retentionPeriod = $actionContext.configuration.retentionPeriod
 
@@ -48,7 +48,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Information "Successfully connected to SQL database"
+        Write-Verbose "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -73,7 +73,7 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Information "Successfully disconnected from SQL database"
+            Write-Verbose "Successfully disconnected from SQL database"
         }
     }
 }
@@ -105,7 +105,7 @@ try {
         Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
         $selectRowCount = ($querySelectResult | measure-object).count
-        Write-Information "Queried data from table [$table] for attribute [$attributeName]. Result count: $selectRowCount"
+        Write-Verbose "Queried data from table [$table] for attribute [$attributeName]. Result count: $selectRowCount"
 
         # Calculate action
         $actionMessage = "calculating action"
@@ -205,11 +205,11 @@ try {
                 break
             }
             "Update" {
-                # Update row - clear whenDeleted
-                $actionMessage = "clearing [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.References.Account)]"
+                # Update row - clear whenDeleted and update employeeId (either for current employee or reusing expired row)
+                $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
-                $queryUpdateSet = "SET [whenDeleted]=null, [whenUpdated]=GETDATE()"
-                $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName' AND [employeeId] = '$($account.employeeId)'"
+                $queryUpdateSet = "SET [employeeId]='$($actionContext.References.Account)', [whenDeleted]=null, [whenUpdated]=GETDATE()"
+                $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
                 $queryUpdateSplatParams = @{
                     ConnectionString = $actionContext.configuration.connectionString
@@ -225,12 +225,12 @@ try {
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             # Action  = "" # Optional
-                            Message = "Cleared [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.References.Account)]."
+                            Message = "Updated row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Set [employeeId] to [$($actionContext.References.Account)] and cleared [whenDeleted]."
                             IsError = $false
                         })
                 }
                 else {
-                    Write-Warning "DryRun: Would clear [whenDeleted] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.References.Account)]."
+                    Write-Warning "DryRun: Would update row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Would set [employeeId] to [$($actionContext.References.Account)] and clear [whenDeleted]."
                 }
 
                 break
