@@ -86,6 +86,10 @@ try {
         throw "The account reference could not be found"
     }
 
+    # Initialize output context objects to accumulate data for each attribute
+    $outputContext.Data = @{}
+    $outputContext.PreviousData = @{}
+
     foreach ($attributeName in $attributeNames) {
         # Check if attribute is in table
         $actionMessage = "querying row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
@@ -208,6 +212,9 @@ try {
                 # Update row - clear whenDeleted and update employeeId (either for current employee or reusing expired row)
                 $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
+                # Set attribute with old database state
+                $outputContext.PreviousData[$attributeName] = $correlatedAccount
+
                 $queryUpdateSet = "SET [employeeId]='$($actionContext.References.Account)', [whenDeleted]=null, [whenUpdated]=GETDATE()"
                 $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
@@ -217,6 +224,16 @@ try {
                     Password         = $actionContext.configuration.password
                     SqlQuery         = $queryUpdate
                     ErrorAction      = "Stop"
+                }
+
+                # Set attribute with new database state
+                $outputContext.Data[$attributeName] = [PSCustomObject]@{
+                    employeeId     = $actionContext.References.Account
+                    attributeName  = $attributeName
+                    attributeValue = $attributeValue
+                    whenCreated    = $correlatedAccount.whenCreated
+                    whenUpdated    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
+                    whenDeleted    = $null
                 }
 
                 $queryUpdateResult = [System.Collections.ArrayList]::new()
@@ -237,6 +254,10 @@ try {
             }
             "NoChanges" {
                 $actionMessage = "skipping updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.References.Account)]"
+
+                # Set both to the same correlated account object since there are no changes
+                $outputContext.PreviousData[$attributeName] = $correlatedAccount
+                $outputContext.Data[$attributeName] = $correlatedAccount
 
                 $outputContext.auditlogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
