@@ -11,6 +11,7 @@ $attributeNames = $($actionContext.Data | Select-Object * -ExcludeProperty emplo
 # Set AccountReference to employeeId at the top level, since it's always the current person's employeeId — no need to set it within a specific action
 $outputContext.AccountReference = $actionContext.Data.employeeId
 
+#region functions
 function Invoke-SQLQuery {
     param(
         [parameter(Mandatory = $true)]
@@ -79,6 +80,7 @@ function Invoke-SQLQuery {
         }
     }
 }
+#endregion functions
 
 try {
     foreach ($attributeName in $attributeNames) {
@@ -86,7 +88,6 @@ try {
         $actionMessage = "querying row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
         $attributeValue = $actionContext.Data.$attributeName -Replace "'", "''"
-        $account = $actionContext.Data | Select-Object * -ExcludeProperty $attributeNames
 
         $querySelect = "SELECT * FROM [$table] WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'"
 
@@ -108,7 +109,7 @@ try {
 
         # If multiple rows are found, filter additionally for employeeId
         if ($selectRowCount -gt 1) {
-            $correlatedAccount = $querySelectResult | Where-Object { $_.employeeId -eq $account.employeeId }
+            $correlatedAccount = $querySelectResult | Where-Object { $_.employeeId -eq $actionContext.Data.employeeId }
             $selectRowCount = ($correlatedAccount | Measure-Object).count
         
             Write-Information "Multiple rows found where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Filtered additionally for employeeId. Result count: $selectRowCount"
@@ -118,7 +119,7 @@ try {
             $correlatedAccount = $querySelectResult
                 
             # Check if value belongs to someone else
-            if ($correlatedAccount.employeeId -ne $account.employeeId) {
+            if ($correlatedAccount.employeeId -ne $actionContext.Data.employeeId) {
                 # Check retention period if value is deleted
                 if (-NOT [string]::IsNullOrEmpty($correlatedAccount.whenDeleted)) {
                     $whenDeletedDate = [datetime]($correlatedAccount.whenDeleted)
@@ -138,7 +139,6 @@ try {
                 }
             }
             else {
-                Write-Warning ($correlatedAccount | ConvertTo-Json)
                 # Value belongs to current employee
                 if (-not([string]::IsNullOrEmpty($correlatedAccount.whenDeleted))) {
                     # Clear whenDeleted to reactivate
@@ -162,18 +162,19 @@ try {
                 # Create row
                 $actionMessage = "creating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.Data.employeeId)]"
 
-                # Add attribute name and value to the account object
-                $account | Add-Member -NotePropertyName 'attributeName' -NotePropertyValue $attributeName
-                $account | Add-Member -NotePropertyName 'attributeValue' -NotePropertyValue $attributeValue
-
-                # Add timestamps
-                $account | Add-Member -NotePropertyName 'whenCreated' -NotePropertyValue (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff") -Force
-                $account | Add-Member -NotePropertyName 'whenUpdated' -NotePropertyValue $null -Force
-                $account | Add-Member -NotePropertyName 'whenDeleted' -NotePropertyValue $null -Force
+                # Create new object for insert
+                $insertObject = [PSCustomObject]@{
+                    employeeId     = $actionContext.Data.employeeId
+                    attributeName  = $attributeName
+                    attributeValue = $attributeValue
+                    whenCreated    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
+                    whenUpdated    = $null
+                    whenDeleted    = $null
+                }
 
                 # Enclose Property Names with brackets [] & Enclose Property Values with single quotes ''
-                $queryInsertProperties = $("[" + (($account.PSObject.Properties.Name) -join "],[") + "]")
-                $queryInsertValues = $(($account.PSObject.Properties.Value | ForEach-Object { if ($_ -ne 'null' -and $null -ne $_) { "'$_'" } else { 'null' } }) -join ',')
+                $queryInsertProperties = $("[" + (($insertObject.PSObject.Properties.Name) -join "],[") + "]")
+                $queryInsertValues = $(($insertObject.PSObject.Properties.Value | ForEach-Object { if ($_ -ne 'null' -and $null -ne $_) { "'$_'" } else { 'null' } }) -join ',')
                 $queryInsert = "INSERT INTO $table ($($queryInsertProperties)) VALUES ($($queryInsertValues))"
 
                 $queryInsertSplatParams = @{
