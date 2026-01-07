@@ -25,6 +25,7 @@
   - [Development resources](#development-resources)
     - [Available lifecycle actions](#available-lifecycle-actions)
     - [Additional scripts](#additional-scripts)
+      - [Configuring checkOnExternalSystemsAd.ps1](#configuring-checkonexternalsystemsadps1)
     - [Database table structure](#database-table-structure)
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
@@ -53,14 +54,14 @@ This connector is designed to solve common identity management challenges:
 
 The following features are available:
 
-| Feature                            | Supported | Notes                                                                           |
-| ---------------------------------- | --------- | ------------------------------------------------------------------------------- |
-| Account Lifecycle                  | ✅         | Create, Update, Delete (soft-delete with retention period)                      |
-| Permissions                        | ❌         | Not applicable for blacklist connector                                          |
-| Resources                          | ❌         | Not applicable for blacklist connector                                          |
-| Entitlement Import: Accounts       | ❌         | Not applicable for blacklist connector                                          |
-| Entitlement Import: Permissions    | ❌         | Not applicable for blacklist connector                                          |
-| Governance Reconciliation Resolutions | ❌     | Not applicable for blacklist connector                                          |
+| Feature                               | Supported | Notes                                                      |
+| ------------------------------------- | --------- | ---------------------------------------------------------- |
+| Account Lifecycle                     | ✅         | Create, Update, Delete (soft-delete with retention period) |
+| Permissions                           | ❌         | Not applicable for blacklist connector                     |
+| Resources                             | ❌         | Not applicable for blacklist connector                     |
+| Entitlement Import: Accounts          | ❌         | Not applicable for blacklist connector                     |
+| Entitlement Import: Permissions       | ❌         | Not applicable for blacklist connector                     |
+| Governance Reconciliation Resolutions | ❌         | Not applicable for blacklist connector                     |
 
 ## Getting started
 
@@ -84,12 +85,12 @@ https://raw.githubusercontent.com/Tools4everBV/HelloID-Conn-Prov-Target-Blacklis
 
 The following settings are required to connect to the SQL database.
 
-| Setting                | Description                                                                                                                                  | Mandatory |
-| ---------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
-| Connection string      | String value of the connection string used to connect to the SQL database                                                                    | Yes       |
-| Table                  | String value of the table name in which the blacklist values reside                                                                          | Yes       |
-| Username               | String value of the username of the SQL user to use in the connection string                                                                 | No        |
-| Password               | String value of the password of the SQL user to use in the connection string                                                                 | No        |
+| Setting                | Description                                                                                                                                                                                                                                                                  | Mandatory |
+| ---------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| Connection string      | String value of the connection string used to connect to the SQL database                                                                                                                                                                                                    | Yes       |
+| Table                  | String value of the table name in which the blacklist values reside                                                                                                                                                                                                          | Yes       |
+| Username               | String value of the username of the SQL user to use in the connection string                                                                                                                                                                                                 | No        |
+| Password               | String value of the password of the SQL user to use in the connection string                                                                                                                                                                                                 | No        |
 | RetentionPeriod (days) | **Critical setting**: Number of days a deleted value remains blocked before it can be reused. Common values: `365` (1 year), `730` (2 years), or `999999` (permanent blocking). This protects against immediate reuse while allowing eventual recycling of namespace values. | Yes       |
 
 ### Correlation configuration
@@ -124,6 +125,7 @@ The account reference is populated with the `employeeId` property during the Cre
 - **Soft-delete with retention**: When a person is deleted, the `whenDeleted` timestamp is set. The value remains blocked for the configured retention period.
 - **Automatic restore**: If a person is re-enabled and their previous attribute value is still blocked, the Create action automatically restores it by clearing the `whenDeleted` timestamp.
 - **Retention period configuration**: Use `RetentionPeriod (days)` to specify how long values remain blocked after deletion. Setting this to `999999` effectively makes the retention permanent.
+- **Self-usage control**: The `checkOnExternalSystemsAd.ps1` script includes an `$allowSelfUsage` configuration. When set to `$false`, even a person's own existing values are treated as non-unique, forcing complete value regeneration. This is useful for migration scenarios or when implementing new naming conventions.
 - **Multiple records handling**: The Update action will issue a warning if multiple records with the same `attributeName` and `attributeValue` are found.
 - **Cross-check validation**: The `checkOnExternalSystemsAd.ps1` script supports `crossCheckOn` configuration to validate uniqueness across different attribute types (e.g., checking if an email address already exists as a proxy address).
 - **keepInSyncWith functionality**: When configured, non-unique status cascades across related fields automatically.
@@ -136,34 +138,95 @@ The account reference is populated with the `employeeId` property during the Cre
 
 The following lifecycle actions are available:
 
-| Action        | Description                                                                                               |
-| ------------- | --------------------------------------------------------------------------------------------------------- |
-| Create        | Creates or restores a blacklist record in the table (if found, clears the `whenDeleted` timestamp).      |
-| Update        | Updates the `whenUpdated` timestamp but not the `attributeValue`.                                        |
-| Delete        | Soft-deletes a blacklist record by setting the `whenDeleted` and `whenUpdated` timestamp.                |
+| Action | Description                                                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| Create | **Creates or restores blacklist records** for each configured attribute. If a value already exists in the blacklist: (1) owned by the same person - clears `whenDeleted` to reactivate, (2) owned by another person but retention period expired - updates `employeeId` and clears `whenDeleted` to reassign, (3) owned by another person within retention period - throws error. If value doesn't exist, creates a new record with `whenCreated` timestamp. |
+| Update | **Maintains blacklist records** for each configured attribute. Similar logic to Create: can create new records if missing, reactivate previously deleted values (clear `whenDeleted`), or reassign expired values to current person. Updates `whenUpdated` timestamp. Does **not** modify the `attributeValue` itself - only ownership and timestamps.                                                                                                       |
+| Delete | **Soft-deletes blacklist records** by setting `whenDeleted` and `whenUpdated` timestamps. Records remain in the database but are marked as deleted. After the configured retention period expires, these values become available for reuse by other persons. Does **not** physically remove rows from the database.                                                                                                                                          |
 
 ### Additional scripts
 
 Beyond the standard lifecycle scripts, this connector includes specialized scripts:
 
-| Script                              | Purpose                                                                                                                                                                                                                                                      |
-| ----------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `checkOnExternalSystemsAd.ps1`      | **Uniqueness validation script** - Configured in the HelloID built-in Active Directory connector to check if proposed values exist in the blacklist before account creation. Includes advanced features like cross-checking (e.g., checking if an email exists as a proxy address) and field synchronization (`keepInSyncWith`). Prevents provisioning errors by validating uniqueness before attempting to create AD accounts. |
-| `createTableBlacklist.sql`          | **Database setup script** - Creates the required SQL table structure with proper column types (NVARCHAR, DATETIME2) and constraints. Must be executed in SQL Server Management Studio or similar tool before using the connector. Sets up the foundation for all blacklist operations. |
-| `GenerateUniqueData/example.create.ps1` | **Legacy example script** - Demonstrates how to generate unique values by querying the SQL blacklist database in older PowerShell v1 connectors. While this is legacy code, it can be adapted for scenarios requiring custom unique value generation (e.g., employee numbers, random identifiers). Not required for standard V2 connector operation. |
+| Script                                  | Purpose                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `checkOnExternalSystemsAd.ps1`          | **Uniqueness validation script** - Configured in the HelloID built-in Active Directory connector to check if proposed values exist in the blacklist before account creation. Validates against retention period: values are non-unique if owned by another person and within retention period, but can be reused if retention period expired. Includes advanced features: (1) **Self-usage control** - configurable `$allowSelfUsage` to determine if persons can reuse their own values, (2) **Cross-checking** - validate if a value exists under different attribute names (e.g., email as both 'mail' and 'userPrincipalName'), (3) **Field synchronization** - `keepInSyncWith` automatically marks related fields as non-unique. Returns `NonUniqueFields` array to HelloID, preventing provisioning errors before AD account creation attempts. |
+| `createTableBlacklist.sql`              | **Database setup script** - Creates the required SQL table structure with proper column types (NVARCHAR, DATETIME2) and constraints. Must be executed in SQL Server Management Studio or similar tool before using the connector. Sets up the foundation for all blacklist operations.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `GenerateUniqueData/example.create.ps1` | **Legacy example script** - Demonstrates how to generate unique values by querying the SQL blacklist database in older PowerShell v1 connectors. While this is legacy code, it can be adapted for scenarios requiring custom unique value generation (e.g., employee numbers, random identifiers). Not required for standard V2 connector operation.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
+
+#### Configuring checkOnExternalSystemsAd.ps1
+
+The uniqueness check script includes several configuration options that must be set before use:
+
+> [!IMPORTANT]
+> **Retention Period Synchronization**: The `checkOnExternalSystemsAd.ps1` script requires access to the same database and retention period configuration as the main connector. Configure the script within the target connector (e.g., Active Directory) by passing the same connection settings and `retentionPeriod` value. The retention period must be consistent across both the blacklist connector configuration and the uniqueness check script to ensure accurate validation.
+
+> [!WARNING]
+> **Initial Configuration Required**: Before deploying to production, you must customize the following configurations in `checkOnExternalSystemsAd.ps1`:
+> 1. `$correlationAttribute` - Must match your account structure (typically `employeeId`)
+> 2. `$allowSelfUsage` - Set according to your business requirements
+> 3. `$fieldsToCheck` - Define which attributes to validate and their relationships
+> 
+> The example configuration is tailored for Active Directory. Adjust field names and cross-check logic for other target systems.
+
+**Correlation Attribute Configuration**
+
+```powershell
+$correlationAttribute = [PSCustomObject]@{
+    accountFieldName = "employeeId"  # Property name in the account object from HelloID
+    systemFieldName  = "employeeId"  # Corresponding column name in the blacklist database
+}
+```
+
+This mapping identifies which attribute links persons between HelloID and the blacklist database. It's essential for:
+- Determining value ownership (does this value belong to the current person or someone else?)
+- Enabling self-usage checks
+- Supporting automatic value restoration for returning employees
+
+**Allow Self-Usage Configuration**
+
+```powershell
+$allowSelfUsage = $true  # Default: true (recommended)
+```
+
+Controls whether a person can reuse values they already own:
+- **`$true` (recommended)**: Person's existing values are treated as unique. They can keep their email, username, etc. without triggering non-unique warnings.
+- **`$false` (strict mode)**: Even the person's own values are treated as non-unique, forcing regeneration of all values. Use this for complete value refresh scenarios or migrations where all values must be regenerated.
+
+**Fields to Check Configuration**
+
+Configure which attributes to validate and how they relate to each other:
+
+```powershell
+$fieldsToCheck = [PSCustomObject]@{
+    "userPrincipalName" = [PSCustomObject]@{
+        systemFieldName = 'userPrincipalName'  # Database column to query
+        accountValue    = $a.userPrincipalName # Value from account object
+        keepInSyncWith  = @("mail", "proxyAddresses")  # Related fields that share uniqueness status
+        crossCheckOn    = @("mail")  # Also check if value exists as different attribute type
+    }
+    # ... additional fields
+}
+```
+
+Configuration properties:
+- **systemFieldName**: The `attributeName` value to search for in the blacklist database
+- **accountValue**: The actual value from the account object to validate
+- **keepInSyncWith**: If this field is non-unique, automatically mark these related fields as non-unique too
+- **crossCheckOn**: Also search for this value under different attribute names (e.g., check if email exists as both 'mail' and 'userPrincipalName')
 
 ### Database table structure
 
 The table includes the following columns:
 
-| Column Name     | Data Type     | Description                                                                      |
-| --------------- | ------------- | -------------------------------------------------------------------------------- |
-| employeeId      | NVARCHAR(100) | Unique identifier for an employee (HelloID person)                               |
-| attributeName   | NVARCHAR(100) | Name of the attribute (e.g., Mail, SamAccountName, UserPrincipalName)           |
-| attributeValue  | NVARCHAR(250) | Value of the attribute (e.g., john.doe@company.com)                             |
-| whenCreated     | DATETIME2(7)  | Timestamp of when the record was originally created                              |
-| whenUpdated     | DATETIME2(7)  | Timestamp of the last update (can be used to track last activity)               |
-| whenDeleted     | DATETIME2(7)  | Timestamp when the record was soft-deleted; `NULL` for active records            |
+| Column Name    | Data Type     | Description                                                           |
+| -------------- | ------------- | --------------------------------------------------------------------- |
+| employeeId     | NVARCHAR(100) | Unique identifier for an employee (HelloID person)                    |
+| attributeName  | NVARCHAR(100) | Name of the attribute (e.g., Mail, SamAccountName, UserPrincipalName) |
+| attributeValue | NVARCHAR(250) | Value of the attribute (e.g., john.doe@company.com)                   |
+| whenCreated    | DATETIME2(7)  | Timestamp of when the record was originally created                   |
+| whenUpdated    | DATETIME2(7)  | Timestamp of the last update (can be used to track last activity)     |
+| whenDeleted    | DATETIME2(7)  | Timestamp when the record was soft-deleted; `NULL` for active records |
 
 Use the `createTableBlacklist.sql` script to create the required table structure in your database.
 
