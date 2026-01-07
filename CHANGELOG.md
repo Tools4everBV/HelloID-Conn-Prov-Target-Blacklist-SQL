@@ -2,40 +2,47 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
-## [2.0.0] - 2025-12-24
+## [2.0.0] - 2026-01-07
 
-This is a major release of HelloID-Conn-Prov-Target-Blacklist-SQL with significant enhancements to match the CSV blacklist connector functionality and Tools4ever V2 connector standards.
+This is a major release of HelloID-Conn-Prov-Target-Blacklist-SQL with significant enhancements to match the CSV blacklist connector functionality and Tools4ever V2 connector standards, plus major improvements to code maintainability, configurability, and operational transparency.
 
 ### Added
 
-- **Retention period support**: Configurable retention period for deleted values with automatic expiration logic
-- **Cross-check validation**: Support for `crossCheckOn` configuration to validate uniqueness across different attribute types (e.g., checking if an email exists as a proxy address)
-- **keepInSyncWith functionality**: Automatic cascading of non-unique status across related fields
-- **Skip optimization**: Redundant database queries are automatically skipped once a field is marked non-unique
-- **Multiple records handling**: Improved logic to filter by employeeId when multiple rows are found
-- **Enhanced error handling**: New action types `OtherEmployeeId` and `MultipleFound` with detailed error messages
-- **Timestamp tracking**: Added `whenCreated`, `whenUpdated`, and `whenDeleted` columns with proper datetime2(7) precision
-- **Comprehensive documentation**: Restructured README with use cases, supported features table, and V2 template compliance
-- **Credential support**: Full SQL authentication support with secure credential initialization
+- Retention period support with configurable duration for deleted values and automatic expiration logic
+- `retentionPeriod` configuration parameter to specify how many days deleted values remain blocked before reuse
+- Cross-check validation via `crossCheckOn` configuration to validate uniqueness across different attribute types (e.g., checking if an email exists as a proxy address)
+- `keepInSyncWith` functionality to replace legacy `syncIterations` approach, providing automatic cascading of non-unique status across related fields
+- `$allowSelfUsage` configuration in `checkOnExternalSystemsAd.ps1` to control whether persons can reuse their own values (replaces `$excludeSelf`)
+- `$fieldsToCheck` object-based configuration in `checkOnExternalSystemsAd.ps1` to replace simple `$attributeNames` array
+- Skip optimization to automatically skip redundant database queries once a field is marked non-unique
+- Action types `OtherEmployeeId` and `MultipleFound` for enhanced error handling with detailed error messages
+- Database columns `whenCreated` and `whenUpdated` with datetime2(7) precision for timestamp tracking
+- PowerShell-based timestamp generation using `Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff"` for consistent datetime2(7) precision
+- Detailed audit logging in Update and Delete actions showing exactly which fields are modified and their new values
+- `#region Configuration` block in `checkOnExternalSystemsAd.ps1` for better code organization
+- README section "Configuring checkOnExternalSystemsAd.ps1" with detailed configuration examples
+- README warnings for retention period synchronization and initial configuration requirements
+- README use cases section explaining practical applications of the blacklist connector
+- README supported features table documenting available capabilities
 
 ### Changed
 
-- **Create script**: Restructured to match CSV connector format with improved action calculation logic
-- **Update script**: Aligned with create script logic including retention period validation
-- **Delete script**: Rewritten to process per-attribute instead of bulk updates, matching CSV structure
-- **checkOnExternalSystemsAd.ps1**: Complete rewrite with advanced field checking configuration and retention period awareness
-- **fieldMapping.json**: Updated to match CSV structure exactly (employeeId only for Create, attributes for Create/Update/Delete)
-- **Logging**: Changed from Write-Information intentions to result-based logging; adjusted log levels (unique=Information, non-unique=Warning)
-- **Audit logs**: Moved inside non-dryRun blocks to prevent audit entries during preview mode
-- **SQL queries**: Simplified UPDATE queries to only modify `whenDeleted` and `whenUpdated` fields
-- **Account reference**: Moved to absolute top of create script for consistency
-
-### Fixed
-
-- **SQL syntax errors**: Fixed bracket joining in SELECT queries that caused "missing or empty column name" errors
-- **UPDATE query logic**: Removed employeeId from SET clause and added to WHERE clause for proper record targeting
-- **Credential initialization**: Fixed missing credential code in checkOnExternalSystemsAd.ps1's Invoke-SQLQuery function
-- **Configuration**: Removed invalid type field from retentionPeriod configuration
+- Create script restructured to match CSV connector format with improved action calculation logic
+- Update script aligned with Create script logic including retention period validation
+- Delete script rewritten to process per-attribute instead of bulk updates
+- `whenDeleted` column type changed from `date` to `datetime2(7)` for precision and consistency
+- checkOnExternalSystemsAd.ps1 field checking logic enhanced with retention period awareness and cross-attribute validation
+- fieldMapping.json updated to match CSV structure (employeeId only for Create, attributes for Create/Update/Delete) with Complex mapping mode using conditional logic
+- Credential initialization in checkOnExternalSystemsAd.ps1's Invoke-SQLQuery function now properly creates SqlCredential object
+- Configuration comments expanded with detailed explanations of field checking logic, cross-checking, and field synchronization
+- README lifecycle action descriptions enhanced with detailed scenario coverage including retention period behavior
+- README additional scripts descriptions improved with retention period logic details
+- Logging changed from Write-Information intentions to result-based logging with adjusted log levels (unique=Information, non-unique=Warning)
+- Audit logs moved inside non-dryRun blocks to prevent audit entries during preview mode
+- SQL UPDATE queries simplified to only modify `whenDeleted` and `whenUpdated` fields
+- Account reference moved to absolute top of create script for consistency
+- Update and Delete actions refactored to build SET clauses dynamically from object properties
+- Logging in checkOnExternalSystemsAd.ps1 improved to distinguish between self-usage scenarios and retention period validations
 
 ### Deprecated
 
@@ -43,7 +50,7 @@ This is a major release of HelloID-Conn-Prov-Target-Blacklist-SQL with significa
 
 ### Removed
 
-- `whenDeleted` field from fieldMapping.json (managed internally by scripts)
+- `whenDeleted` field from fieldMapping.json (now managed internally by scripts)
 - Unnecessary Write-Information statements for action intentions
 
 ## [1.1.0] - 2024-12-12
