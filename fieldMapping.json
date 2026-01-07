@@ -29,7 +29,7 @@
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getMail() {\\r\\n    let mail = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.mail !== 'undefined') {\\r\\n        mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    }\\r\\n    \\r\\n    return mail;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getMail();\\r\\n}\"",
+          "Value": "\"function getMail() {\\r\\n    let mail = Person.Accounts.MicrosoftActiveDirectory.mail;\\r\\n    \\r\\n    return mail;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getMail();\\r\\n}\"",
           "UsedInNotifications": false,
           "StoreInAccountData": true
         }
@@ -47,7 +47,7 @@
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getSAMAccountName() {\\r\\n    let sAMAccountName = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.sAMAccountName !== 'undefined') {\\r\\n        sAMAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    }\\r\\n    \\r\\n    return sAMAccountName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getSAMAccountName();\\r\\n}\"",
+          "Value": "\"function getSAMAccountName() {\\r\\n    let sAMAccountName = Person.Accounts.MicrosoftActiveDirectory.sAMAccountName;\\r\\n    \\r\\n    return sAMAccountName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getSAMAccountName();\\r\\n}\"",
           "UsedInNotifications": false,
           "StoreInAccountData": true
         }
@@ -65,7 +65,7 @@
             "Delete"
           ],
           "MappingMode": "Complex",
-          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = '';\\r\\n    \\r\\n    if (typeof Person.Accounts.MicrosoftActiveDirectory !== 'undefined' && typeof Person.Accounts.MicrosoftActiveDirectory.userPrincipalName !== 'undefined') {\\r\\n        userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    }\\r\\n    \\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getUserPrincipalName();\\r\\n}\"",
+          "Value": "\"function getUserPrincipalName() {\\r\\n    let userPrincipalName = Person.Accounts.MicrosoftActiveDirectory.userPrincipalName;\\r\\n    \\r\\n    return userPrincipalName;\\r\\n}\\r\\n\\r\\n// Check if Person data is available\\r\\nif(Person.ExternalId){\\r\\n    getUserPrincipalName();\\r\\n}\"",
           "UsedInNotifications": false,
           "StoreInAccountData": true
         }
