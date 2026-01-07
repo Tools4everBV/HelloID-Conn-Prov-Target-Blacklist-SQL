@@ -105,7 +105,7 @@ try {
         Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult) -verbose:$false
 
         $selectRowCount = ($querySelectResult | measure-object).count
-        Write-Verbose "Queried data from table [$table] for attribute [$attributeName]. Result count: $selectRowCount"
+        Write-Verbose "Queried data FROM [$table] WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$attributeValue'. Result count: $selectRowCount"
 
         # Calculate action
         $actionMessage = "calculating action"
@@ -188,13 +188,14 @@ try {
                     ErrorAction      = "Stop"
                 }
 
-                $queryInsertResult = [System.Collections.ArrayList]::new()
-                if (-not($actioncontext.dryRun -eq $true)) {
-                    Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
+                # Always set previousData to $null as the entire object isn't stored in HelloId, but previousData and data need to differ to log the change
+                $outputContext.PreviousData | Add-Member -NotePropertyName $attributeName -NotePropertyValue $null -Force
+                $outputContext.Data | Add-Member -NotePropertyName $attributeName -NotePropertyValue $attributeValue -Force
 
-                    # Set Data to the newly created object, PreviousData is null since it didn't exist
-                    $outputContext.PreviousData[$attributeName] = $null
-                    $outputContext.Data[$attributeName] = $insertObject
+                
+                if (-not($actioncontext.dryRun -eq $true)) {
+                    $queryInsertResult = [System.Collections.ArrayList]::new()
+                    Invoke-SQLQuery @queryInsertSplatParams -Data ([ref]$queryInsertResult)
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             # Action  = "" # Optional
@@ -208,14 +209,27 @@ try {
 
                 break
             }
+            
             "Update" {
                 # Update row - clear whenDeleted and update employeeId (either for current employee or reusing expired row)
-                $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
+                $actionMessage = "updating [employeeId] to [$($updateObject.employeeId)] and [whenDeleted] to [$($updateObject.whenDeleted)] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
-                # Set attribute with old database state
-                $outputContext.PreviousData[$attributeName] = $correlatedAccount
+                # Create new object for update
+                $updateObject = [PSCustomObject]@{
+                    employeeId  = $actionContext.References.Account
+                    whenDeleted = $null
+                    whenUpdated = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
+                }
 
-                $queryUpdateSet = "SET [employeeId]='$($actionContext.References.Account)', [whenDeleted]=null, [whenUpdated]=GETDATE()"
+                # Build SET clause from updateObject properties
+                $queryUpdateSet = "SET " + (($updateObject.PSObject.Properties | ForEach-Object { 
+                            if ($_.Value -eq $null) { 
+                                "[$($_.Name)]=null" 
+                            }
+                            else { 
+                                "[$($_.Name)]='$($_.Value)'" 
+                            } 
+                        }) -join ', ')
                 $queryUpdate = "UPDATE [$table] $queryUpdateSet WHERE [attributeValue] = '$attributeValue' AND [attributeName] = '$attributeName'"
 
                 $queryUpdateSplatParams = @{
@@ -226,38 +240,33 @@ try {
                     ErrorAction      = "Stop"
                 }
 
-                # Set attribute with new database state
-                $outputContext.Data[$attributeName] = [PSCustomObject]@{
-                    employeeId     = $actionContext.References.Account
-                    attributeName  = $attributeName
-                    attributeValue = $attributeValue
-                    whenCreated    = $correlatedAccount.whenCreated
-                    whenUpdated    = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
-                    whenDeleted    = $null
-                }
+                # Always set previousData to $null as the entire object isn't stored in HelloId, but previousData and data need to differ to log the change
+                $outputContext.PreviousData | Add-Member -NotePropertyName $attributeName -NotePropertyValue $null -Force
+                $outputContext.Data | Add-Member -NotePropertyName $attributeName -NotePropertyValue $attributeValue -Force
 
-                $queryUpdateResult = [System.Collections.ArrayList]::new()
                 if (-not($actioncontext.dryRun -eq $true)) {
+                    $queryUpdateResult = [System.Collections.ArrayList]::new()
                     Invoke-SQLQuery @queryUpdateSplatParams -Data ([ref]$queryUpdateResult)
 
                     $outputContext.auditlogs.Add([PSCustomObject]@{
                             # Action  = "" # Optional
-                            Message = "Updated row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Set [employeeId] to [$($actionContext.References.Account)] and cleared [whenDeleted]."
+                            Message = "Updated [employeeId] to [$($updateObject.employeeId)] and [whenDeleted] to [$($updateObject.whenDeleted)] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]."
                             IsError = $false
                         })
                 }
                 else {
-                    Write-Warning "DryRun: Would update row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Would set [employeeId] to [$($actionContext.References.Account)] and clear [whenDeleted]."
+                    Write-Warning "DryRun: Would update [employeeId] to [$($updateObject.employeeId)] and [whenDeleted] to [$($updateObject.whenDeleted)] for row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]."
                 }
 
                 break
             }
+            
             "NoChanges" {
                 $actionMessage = "skipping updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)] AND [employeeID] = [$($actionContext.References.Account)]"
 
-                # Set both to the same correlated account object since there are no changes
-                $outputContext.PreviousData[$attributeName] = $correlatedAccount
-                $outputContext.Data[$attributeName] = $correlatedAccount
+                # Set both previousData and data to the correlatedAccount object to show no changes
+                $outputContext.PreviousData | Add-Member -NotePropertyName $attributeName -NotePropertyValue $correlatedAccount.attributeValue -Force
+                $outputContext.Data | Add-Member -NotePropertyName $attributeName -NotePropertyValue $correlatedAccount.attributeValue -Force
 
                 $outputContext.auditlogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
@@ -267,6 +276,7 @@ try {
 
                 break
             }
+
             "OtherEmployeeId" {
                 $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 
@@ -275,6 +285,7 @@ try {
                 
                 break
             }
+
             "MultipleFound" {
                 $actionMessage = "updating row in table [$table] where [$($attributeName)] = [$($actionContext.Data.$attributeName)]"
 

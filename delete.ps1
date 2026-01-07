@@ -122,8 +122,22 @@ try {
                 "Update" {
                     # Update row
                     $actionMessage = "updating [whenDeleted] and [whenUpdated] for row in table [$table] where [$($attributeName)] = [$($dbCurrentRow.attributeValue)] AND [employeeID] = [$($actionContext.References.Account)]"
-                    $now = Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff"
-                    $queryUpdateSet = "[whenDeleted]='$now', [whenUpdated]='$now'"
+                    
+                    # Create new object for update
+                    $updateObject = [PSCustomObject]@{
+                        whenDeleted = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
+                        whenUpdated = (Get-Date -Format "yyyy-MM-ddTHH:mm:ss.fff")
+                    }
+
+                    # Build SET clause from updateObject properties
+                    $queryUpdateSet = (($updateObject.PSObject.Properties | ForEach-Object { 
+                                if ($_.Value -eq $null) { 
+                                    "[$($_.Name)]=null" 
+                                }
+                                else { 
+                                    "[$($_.Name)]='$($_.Value)'" 
+                                } 
+                            }) -join ', ')
                     $queryUpdate = "UPDATE [$table] SET $queryUpdateSet WHERE [attributeName] = '$attributeName' AND [attributeValue] = '$($dbCurrentRow.attributeValue)' AND [employeeId] = '$($actionContext.References.Account)'"
 
                     $queryUpdateSplatParams = @{
@@ -140,12 +154,12 @@ try {
 
                         $outputContext.auditlogs.Add([PSCustomObject]@{
                                 # Action  = "" # Optional
-                                Message = "Updated [whenDeleted] to [$($now)] for row in table [$table] where [$($attributeName)] = [$($dbCurrentRow.attributeValue)] AND [employeeID] = [$($actionContext.References.Account)]."
+                                Message = "Updated [whenDeleted] to [$($updateObject.whenDeleted)] for row in table [$table] where [$($attributeName)] = [$($dbCurrentRow.attributeValue)] AND [employeeID] = [$($actionContext.References.Account)]."
                                 IsError = $false
                             })
                     }
                     else {
-                        Write-Warning "DryRun: Would update [whenDeleted] to [$($now)] for row in table [$table] where [$($attributeName)] = [$($dbCurrentRow.attributeValue)] AND [employeeID] = [$($actionContext.References.Account)]."
+                        Write-Warning "DryRun: Would update [whenDeleted] to [$($updateObject.whenDeleted)] for row in table [$table] where [$($attributeName)] = [$($dbCurrentRow.attributeValue)] AND [employeeID] = [$($actionContext.References.Account)]."
                     }
 
                     break
