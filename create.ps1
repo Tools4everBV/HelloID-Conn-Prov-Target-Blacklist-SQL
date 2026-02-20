@@ -114,10 +114,11 @@ try {
         
             Write-Information "Multiple rows found where [$($attributeName)] = [$($actionContext.Data.$attributeName)]. Filtered additionally for employeeId. Result count: $selectRowCount"
         }
-
-        if ($selectRowCount -eq 1) {
+        else {
             $correlatedAccount = $querySelectResult
-                
+        }
+
+        if ($selectRowCount -eq 1) {                
             # Check if value belongs to someone else
             if ($correlatedAccount.employeeId -ne $actionContext.Data.employeeId) {
                 # Check retention period if value is deleted
