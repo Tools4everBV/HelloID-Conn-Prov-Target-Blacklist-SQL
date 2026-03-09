@@ -9,7 +9,7 @@ GO
 
 CREATE TABLE [dbo].[blacklist](
 	[attributeName] [nvarchar](50) NOT NULL,
-	[attributeValue] [nvarchar](50) NOT NULL,
+	[attributeValue] [nvarchar](255) NOT NULL,
 	[employeeId] [nvarchar](50) NOT NULL,
 	[whenCreated] [datetime2](7) NULL,
 	[whenUpdated] [datetime2](7) NULL,
