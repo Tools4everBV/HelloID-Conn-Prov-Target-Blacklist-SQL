@@ -9,9 +9,11 @@ GO
 
 CREATE TABLE [dbo].[blacklist](
 	[attributeName] [nvarchar](50) NOT NULL,
-	[attributeValue] [nvarchar](50) NOT NULL,
+	[attributeValue] [nvarchar](255) NOT NULL,
 	[employeeId] [nvarchar](50) NOT NULL,
-	[whenDeleted] [date] NULL
+	[whenCreated] [datetime2](7) NULL,
+	[whenUpdated] [datetime2](7) NULL,
+	[whenDeleted] [datetime2](7) NULL
 ) ON [PRIMARY]
 GO
 

@@ -2,36 +2,89 @@
 # HelloID-Conn-Prov-Target-Blacklist-Check-On-External-Systems-AD-SQL
 #########################################################################
 
-# Initialize default values
-$success = $false # Set to false at start, at the end, only when no error occurs it is set to true
-$auditLogs = [System.Collections.Generic.List[PSCustomObject]]::new()
-$NonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
+# Initialize default properties
+$a = $account | ConvertFrom-Json;
+$aRef = $accountReference | ConvertFrom-Json
 
+# The entitlementContext contains the configuration
+# - configuration: The configuration that is set in the Custom PowerShell configuration
 $eRef = $entitlementContext | ConvertFrom-Json
-$c = $eRef.configuration
-$a = $account | ConvertFrom-Json
-$p = $person | ConvertFrom-Json
 
-# Used to connect to SQL server.
-$connectionString = $c.connectionString
-$username = $c.username
-$password = $c.password
-$table = $c.table
+$table = $eRef.configuration.table
+$retentionPeriod = $eRef.configuration.retentionPeriod
+
+# Operation is a script parameter which contains the action HelloID wants to perform for this entitlement
+# It has one of the following values: "create", "enable", "update", "disable", "delete"
+$o = $operation | ConvertFrom-Json
+
+# Set Success to false at start, at the end, only when no error occurs it is set to true
+$success = $false
+
+# Initiate empty list for Non Unique Fields
+$nonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
 
 #region Change mapping here
 
-# select which attributes should be checked
-$attributeNames = @('SamAccountName', 'UserPrincipalName')
+# Correlation Attribute
+# Identifies and matches persons between the account object (from HelloID) and the blacklist database
+# Used to determine ownership of values: does a blacklisted value belong to the current person or someone else?
+# Required for: Self-usage checks, retention period validation, and ownership determination
+$correlationAttribute = [PSCustomObject]@{
+    accountFieldName = "employeeId"  # Property name in the account object received from HelloID
+    systemFieldName  = "employeeId"  # Corresponding column name in the blacklist database table
+}
 
-# Raise iteration of all configured fields when one is not unique
-$syncIterations = $true
+# Allow Self-Usage Configuration
+# Determines whether a person can reuse values they already own in the blacklist database
+# - $true (recommended): Person's own values are treated as unique
+#   Example: Person can keep their existing email address without triggering non-unique warnings
+#   This is the normal behavior for most scenarios
+# - $false (strict mode): Person's own values are also treated as non-unique
+#   Example: Forces regeneration of all values, even if the person already owns them
+#   Use case: When implementing a complete value refresh or migration scenario
+# Note: Works in conjunction with $correlationAttribute to determine value ownership
+$allowSelfUsage = $true
 
-# Select which attributes should iterate when syncIterations = $true; this usually mirrors the AD field mapping uniqueness configuration
-$syncIterationsAttributeNames = @('SamAccountName', 'UserPrincipalName', 'commonName', 'mail', "proxyAddresses")
-
-# Exclude self from query
-$excludeSelf = $true
-
+# Fields to Check for Uniqueness
+# Defines which account properties should be validated against the blacklist database
+# Each field configuration includes:
+# - systemFieldName: The database column name to query (attributeName field in the blacklist table)
+# - accountValue: The actual value from the account object to validate
+# - keepInSyncWith: Related properties that share uniqueness status (if one is non-unique, all are marked non-unique)
+# - crossCheckOn: Additional properties to check for conflicts (searches across multiple attributeName values)
+#   Example: If userPrincipalName="user@domain.com", also check if mail="user@domain.com" exists
+$fieldsToCheck = [PSCustomObject]@{
+    "userPrincipalName" = [PSCustomObject]@{
+        systemFieldName = 'userPrincipalName'
+        accountValue    = $a.userPrincipalName
+        keepInSyncWith  = @("mail", "proxyAddresses")
+        crossCheckOn    = @("mail")
+    }
+    "mail"              = [PSCustomObject]@{
+        systemFieldName = 'mail'
+        accountValue    = $a.mail
+        keepInSyncWith  = @("userPrincipalName", "proxyAddresses")
+        crossCheckOn    = @("userPrincipalName")
+    }
+    "proxyAddresses"    = [PSCustomObject]@{
+        systemFieldName = 'mail' # Note: proxyAddresses normally isn't in the blacklist database, only the primary SMTP address (mail attribute) is checked
+        accountValue    = $a.proxyAddresses
+        keepInSyncWith  = @("userPrincipalName", "mail")
+        crossCheckOn    = @("userPrincipalName")
+    }
+    "sAMAccountName"    = [PSCustomObject]@{
+        systemFieldName = 'sAMAccountName'
+        accountValue    = $a.sAMAccountName
+        keepInSyncWith  = @("commonName")
+        crossCheckOn    = $null
+    }
+    "commonName"        = [PSCustomObject]@{
+        systemFieldName = 'cn'
+        accountValue    = $a.commonName
+        keepInSyncWith  = @("sAMAccountName")
+        crossCheckOn    = $null
+    }
+}
 #endregion Change mapping here
 
 #region functions
@@ -55,6 +108,18 @@ function Invoke-SQLQuery {
     try {
         $Data.value = $null
 
+        # Initialize connection and execute query
+        if (-not[String]::IsNullOrEmpty($Username) -and -not[String]::IsNullOrEmpty($Password)) {
+            # First create the PSCredential object
+            $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
+            $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
+ 
+            # Set the password as read only
+            $credential.Password.MakeReadOnly()
+ 
+            # Create the SqlCredential object
+            $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
+        }
         # Connect to the SQL server
         $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
         $SqlConnection.ConnectionString = $ConnectionString
@@ -62,7 +127,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Information "Successfully connected to SQL database"
+        Write-Verbose "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -87,81 +152,137 @@ function Invoke-SQLQuery {
     finally {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
-            Write-Information "Successfully disconnected from SQL database"
+            Write-Verbose "Successfully disconnected from SQL database"
         }
     }
 }
 #endregion functions
 
 try {
-    $valuesToCheck = [PSCustomObject]@{}
-    foreach ($attributeName in $attributeNames) {
-        if ($a.PsObject.Properties.Name -contains $attributeName) {
-            $valuesToCheck | Add-Member -MemberType NoteProperty -Name $attributeName -Value $a.$attributeName
+    # Query current data in database
+    foreach ($fieldToCheck in $fieldsToCheck.PsObject.Properties | Where-Object { -not[String]::IsNullOrEmpty($_.Value.accountValue) }) {
+        # Skip if this field is already marked as non-unique
+        if ($nonUniqueFields -contains $fieldToCheck.Name) {
+            Write-Verbose "Skipping uniqueness check for property [$($fieldToCheck.Name)] with value(s) [$($fieldToCheck.Value.accountValue -join ', ')] because it is already marked as non-unique (either directly or through keepInSyncWith configuration)."
+            continue
         }
-    }
-    if (-not[String]::IsNullOrEmpty($valuesToCheck)) {
 
-        # Query current data in database
-        foreach ($attribute in $valuesToCheck.PSObject.Properties) {
-            try {
-                $querySelect = "SELECT * FROM [$table] WHERE [attributeName] = '$($attribute.Name)' AND  [attributeValue] = '$($attribute.Value)'"
-                if ($excludeSelf) {
-                    $querySelect = "$querySelect AND NOT [EmployeeId] = '$($p.ExternalId)'"
-                }
-
-                $querySelectSplatParams = @{
-                    ConnectionString = $connectionString
-                    Username         = $username
-                    Password         = $password
-                    SqlQuery         = $querySelect
-                    ErrorAction      = "Stop"
-                }
-
-                $querySelectResult = [System.Collections.ArrayList]::new()
-                Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
-                $selectRowCount = ($querySelectResult | measure-object).count
-                Write-Information "Successfully queried data from table [$table] for attribute [$($attribute.Name)]. Query: $($querySelect). Returned rows: $selectRowCount)"
-
-                if ($selectRowCount -ne 0) {
-                    Write-Warning "$($attribute.Name) value [$($attribute.Value)] is NOT unique in blacklist table [$table]"
-                    [void]$NonUniqueFields.Add($attribute.Name)
-                }
-                else {
-                    Write-Information "(Unique). [$($attribute.Name)] value [$($attribute.Value)] is not found in table [$table]"
+        foreach ($fieldToCheckAccountValue in $fieldToCheck.Value.accountValue) {
+            # Remove smtp: prefix for proxyAddresses
+            $fieldToCheckAccountValue = $fieldToCheckAccountValue -replace '(?i)^smtp:', ''
+            
+            # Build WHERE clause starting with the primary field
+            $whereClause = "[attributeName] = '$($fieldToCheck.Value.systemFieldName)' AND [attributeValue] = '$fieldToCheckAccountValue'"
+            
+            # Add cross-check conditions if configured
+            if (@($fieldToCheck.Value.crossCheckOn).Count -ge 1) {
+                foreach ($fieldToCrossCheckOn in $fieldToCheck.Value.crossCheckOn) {
+                    # Get the system field name for the cross-check field
+                    $crossCheckSystemFieldName = $fieldsToCheck.$fieldToCrossCheckOn.systemFieldName
+                    
+                    # Custom check for proxyAddresses to prefix value with 'smtp:'
+                    if ($fieldToCrossCheckOn -eq 'proxyAddresses') {
+                        $whereClause = $whereClause + " OR ([attributeName] = '$crossCheckSystemFieldName' AND [attributeValue] = 'smtp:$fieldToCheckAccountValue')"
+                    }
+                    else {
+                        $whereClause = $whereClause + " OR ([attributeName] = '$crossCheckSystemFieldName' AND [attributeValue] = '$fieldToCheckAccountValue')"
+                    }
                 }
             }
-            catch {
-                $ex = $PSItem
-                # Set Verbose error message
-                $verboseErrorMessage = $ex.Exception.Message
-                # Set Audit error message
-                $auditErrorMessage = $ex.Exception.Message
+            
+            $querySelect = "SELECT * FROM [$table] WHERE $whereClause"
 
-                Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-                $auditLogs.Add([PSCustomObject]@{
-                        # Action  = "" # Optional
-                        Message = "Error checking mapped values against database data. Error Message: $($auditErrorMessage)"
-                        IsError = $True
-                    })
+            $querySelectSplatParams = @{
+                ConnectionString = $eRef.configuration.connectionString
+                Username         = $eRef.configuration.username
+                Password         = $eRef.configuration.password
+                SqlQuery         = $querySelect
+                ErrorAction      = "Stop"
+            }
 
-                # Use throw, as auditLogs are not available in check on external system
-                throw "Error checking mapped values against database data. Error Message: $($auditErrorMessage)"
+            $querySelectResult = [System.Collections.ArrayList]::new()
+            Invoke-SQLQuery @querySelectSplatParams -Data ([ref]$querySelectResult)
+            $selectRowCount = ($querySelectResult | measure-object).count
+            Write-Verbose "Queried data from table [$table] for attribute [$($fieldToCheck.Name)] with cross-check. Query: $($querySelect). Returned rows: $selectRowCount"
+
+            # Check property uniqueness with retention period logic
+            if (@($querySelectResult).count -gt 0) {
+                foreach ($dbRow in $querySelectResult) {
+                    # Check if the person is using the value themselves (based on correlation attribute)
+                    if ($dbRow.($correlationAttribute.systemFieldName) -eq $a.($correlationAttribute.accountFieldName)) {
+                        if ($allowSelfUsage) {
+                            Write-Information "Person is using property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] themselves."
+                        }
+                        else {
+                            # Self-usage is not allowed - treat as non-unique
+                            Write-Warning "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is not unique. Person is using this value themselves, but self-usage is disabled (allowSelfUsage = false). [$($correlationAttribute.systemFieldName)]: [$($dbRow.($correlationAttribute.systemFieldName))]."
+                            [void]$NonUniqueFields.Add($fieldToCheck.Name)
+                            
+                            # Add related fields from keepInSyncWith
+                            if (@($fieldToCheck.Value.keepInSyncWith).Count -ge 1) {
+                                foreach ($fieldToKeepInSyncWith in $fieldToCheck.Value.keepInSyncWith | Where-Object { $_ -in $a.PsObject.Properties.Name }) {
+                                    Write-Warning "Property [$fieldToKeepInSyncWith] is marked as non-unique because it is configured to keepInSyncWith [$($fieldToCheck.Name)], which is not unique."
+                                    [void]$NonUniqueFields.Add($fieldToKeepInSyncWith)
+                                }
+                            }
+                            
+                            # Break out of the loop as we only need to find one non-unique field
+                            break
+                        }
+                    }
+                    else {
+                        # Check retention period if whenDeleted is set
+                        if (-NOT [string]::IsNullOrEmpty($dbRow.whenDeleted)) {
+                            $whenDeletedDate = [datetime]($dbRow.whenDeleted)
+                            $daysDiff = (New-TimeSpan -Start $whenDeletedDate -End (Get-Date)).Days
+                        }
+                        else {
+                            $daysDiff = 0
+                        }
+
+                        if ($daysDiff -lt $retentionPeriod) {
+                            # Check if this is a direct match or cross-check match
+                            if ($dbRow.attributeName -eq $fieldToCheck.Value.systemFieldName) {
+                                Write-Warning "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is not unique. It is currently in use by [$($correlationAttribute.systemFieldName)]: [$($dbRow.($correlationAttribute.systemFieldName))]. The associated [whenDeleted] timestamp [$($dbRow.whenDeleted)] is still within the allowed retention period of [$($retentionPeriod) days]."
+                            }
+                            else {
+                                Write-Warning "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is not unique due to cross-check. The value exists as [$($dbRow.attributeName)] = [$($dbRow.attributeValue)] in use by [$($correlationAttribute.systemFieldName)]: [$($dbRow.($correlationAttribute.systemFieldName))]. The associated [whenDeleted] timestamp [$($dbRow.whenDeleted)] is still within the allowed retention period of [$($retentionPeriod) days]."
+                            }
+                            [void]$NonUniqueFields.Add($fieldToCheck.Name)
+                                
+                            # Add related fields from keepInSyncWith
+                            if (@($fieldToCheck.Value.keepInSyncWith).Count -ge 1) {
+                                foreach ($fieldToKeepInSyncWith in $fieldToCheck.Value.keepInSyncWith | Where-Object { $_ -in $a.PsObject.Properties.Name }) {
+                                    Write-Warning "Property [$fieldToKeepInSyncWith] is marked as non-unique because it is configured to keepInSyncWith [$($fieldToCheck.Name)], which is not unique."
+                                    [void]$NonUniqueFields.Add($fieldToKeepInSyncWith)
+                                }
+                            }
+                                
+                            # Break out of the loop as we only need to find one non-unique field
+                            break
+                        }
+                        else {
+                            Write-Information "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is considered unique. Although it was previously used by [$($correlationAttribute.systemFieldName)]: [$($dbRow.($correlationAttribute.systemFieldName))], the [whenDeleted] timestamp [$($dbRow.whenDeleted)] exceeds the allowed retention period of [$($retentionPeriod) days] and the value will be reused."
+                        }
+                    }
+                }
+            }
+            elseif (@($querySelectResult).count -eq 0) {
+                Write-Information "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is unique."
             }
         }
     }
 }
 catch {
     $ex = $PSItem
-    # Set Verbose error message
-    $verboseErrorMessage = $ex.Exception.Message
+    
+    $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
 
-    # Set Audit error message
-    $auditErrorMessage = $ex.Exception.Message
+    Write-Warning $warningMessage
 
-    Write-Information "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($verboseErrorMessage)"
-    # Use throw, as auditLogs are not available in check on external system
-    throw "Error performing uniqueness check on external systems. Error Message: $($auditErrorMessage)"
+    # Required to write an error as uniqueness check doesn't show auditlog
+    Write-Error $auditMessage
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true
@@ -169,17 +290,13 @@ finally {
         $success = $true
     }
 
-    # When syncIterations is set to true, set NonUniqueFields to all configured fields
-    if (($NonUniqueFields | Measure-Object).Count -ge 1 -and $syncIterations -eq $true) {
-        $NonUniqueFields = $attributeNames + $syncIterationsAttributeNames | Sort-Object -Unique
-    }
+    $nonUniqueFields = @($nonUniqueFields | Sort-Object -Unique)
 
     # Send results
     $result = [PSCustomObject]@{
         Success         = $success
-
-        # Add field name as string when field is not unique
-        NonUniqueFields = $NonUniqueFields
+        NonUniqueFields = $nonUniqueFields
     }
+    
     Write-Output ($result | ConvertTo-Json -Depth 10)
 }
