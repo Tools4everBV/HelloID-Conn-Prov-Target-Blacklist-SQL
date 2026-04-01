@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com/), and this project adheres to [Semantic Versioning](https://semver.org/).
 
+## [2.0.1] - 2026-04-01
+
+### Fixed
+
+- Corrected count check in checkOnExternalSystemsAd.ps1 to use `$selectRowCount` variable instead of `@($querySelectResult).count` for more reliable result counting
+
 ## [2.0.0] - 2026-01-07
 
 This is a major release of HelloID-Conn-Prov-Target-Blacklist-SQL with significant enhancements to match the CSV blacklist connector functionality and Tools4ever V2 connector standards, plus major improvements to code maintainability, configurability, and operational transparency.
