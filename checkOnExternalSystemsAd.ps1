@@ -29,8 +29,14 @@ $nonUniqueFields = [System.Collections.Generic.List[PSCustomObject]]::new()
 # Identifies and matches persons between the account object (from HelloID) and the blacklist database
 # Used to determine ownership of values: does a blacklisted value belong to the current person or someone else?
 # Required for: Self-usage checks, retention period validation, and ownership determination
+#
+# IMPORTANT: The accountFieldName specified here MUST be mapped in your field mapping configuration
+# for ALL operations where this uniqueness check is used (create, update, etc.).
+# If this field is not mapped or is empty, the uniqueness check cannot function correctly.
+# Common mistake: Mapping the field only for 'create' but using the uniqueness check for both 'create' and 'update'.
+# Solution: Ensure the field is mapped for all relevant operations in your HelloID configuration.
 $correlationAttribute = [PSCustomObject]@{
-    accountFieldName = "employeeId"  # Property name in the account object received from HelloID
+    accountFieldName = "employeeId"  # Property name in the account object received from HelloID - MUST be mapped in field mapping!
     systemFieldName  = "employeeId"  # Corresponding column name in the blacklist database table
 }
 
@@ -159,6 +165,21 @@ function Invoke-SQLQuery {
 #endregion functions
 
 try {
+    # Validate that correlation attribute is mapped and has a value
+    if ([string]::IsNullOrEmpty($correlationAttribute.accountFieldName)) {
+        throw "Correlation attribute 'accountFieldName' is not configured. This is a mandatory configuration setting."
+    }
+    
+    if (-not ($a.PSObject.Properties.Name -contains $correlationAttribute.accountFieldName)) {
+        throw "Correlation attribute [$($correlationAttribute.accountFieldName)] is not present in the account object. Please ensure this field is mapped in your HelloID field mapping configuration for all operations (create, update, etc.) where this uniqueness check is used."
+    }
+    
+    if ([string]::IsNullOrEmpty($a.($correlationAttribute.accountFieldName))) {
+        throw "Correlation attribute [$($correlationAttribute.accountFieldName)] exists in the account object but has no value. Please ensure this field is properly mapped with a valid value in your HelloID field mapping configuration."
+    }
+    
+    Write-Information "Correlation attribute validation successful: [$($correlationAttribute.accountFieldName)] = [$($a.($correlationAttribute.accountFieldName))]"
+
     # Query current data in database
     foreach ($fieldToCheck in $fieldsToCheck.PsObject.Properties | Where-Object { -not[String]::IsNullOrEmpty($_.Value.accountValue) }) {
         # Skip if this field is already marked as non-unique
@@ -206,7 +227,7 @@ try {
             Write-Verbose "Queried data from table [$table] for attribute [$($fieldToCheck.Name)] with cross-check. Query: $($querySelect). Returned rows: $selectRowCount"
 
             # Check property uniqueness with retention period logic
-            if ($selectRowCount -gt 0) {
+            if (@($querySelectResult).count -gt 0) {
                 foreach ($dbRow in $querySelectResult) {
                     # Check if the person is using the value themselves (based on correlation attribute)
                     if ($dbRow.($correlationAttribute.systemFieldName) -eq $a.($correlationAttribute.accountFieldName)) {
@@ -267,7 +288,7 @@ try {
                     }
                 }
             }
-            elseif ($selectRowCount -eq 0) {
+            elseif (@($querySelectResult).count -eq 0) {
                 Write-Information "Property [$($fieldToCheck.Name)] with value [$fieldToCheckAccountValue] is unique."
             }
         }
