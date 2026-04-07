@@ -169,6 +169,13 @@ The uniqueness check script includes several configuration options that must be 
 > 
 > The example configuration is tailored for Active Directory. Adjust field names and cross-check logic for other target systems.
 
+> [!IMPORTANT]
+> **Field Mapping Requirement**: The `accountFieldName` specified in `$correlationAttribute` (typically `employeeId`) MUST be mapped in your HelloID field mapping configuration for ALL operations where the uniqueness check is used (create, update, etc.). If this field is not mapped or is empty, the uniqueness check cannot function correctly.
+> 
+> **Common mistake**: Mapping the field only for 'create' but using the uniqueness check for both 'create' and 'update'.
+> 
+> **Solution**: Ensure the correlation attribute field is mapped for all relevant operations in your HelloID field mapping configuration. The script will validate that the field exists and has a value before performing any uniqueness checks.
+
 **Correlation Attribute Configuration**
 
 ```powershell

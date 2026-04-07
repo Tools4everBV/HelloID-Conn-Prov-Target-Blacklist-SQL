@@ -4,6 +4,10 @@ All notable changes to this project will be documented in this file. The format 
 
 ## [2.0.1] - 2026-04-01
 
+### Changed
+
+- Added IMPORTANT callout in README documenting field mapping requirement for correlation attribute (`accountFieldName`) in `checkOnExternalSystemsAd.ps1` configuration, emphasizing that it must be mapped for ALL operations (create, update, etc.) where the uniqueness check is used
+
 ### Fixed
 
 - Corrected count check in checkOnExternalSystemsAd.ps1 to use `$selectRowCount` variable instead of `@($querySelectResult).count` for more reliable result counting
